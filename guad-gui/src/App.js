@@ -1,13 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
 import SemiCircleProgressBar from "react-progressbar-semicircle";
 import LiveGraph from './components/LiveGraph';
 import './App.css';
 
+// Define a reducer for managing sensor data
+const sensorReducer = (state, action) => {
+  switch (action.type) {
+    case 'UPDATE_SENSORS':
+      return action.payload;
+    default:
+      return state;
+  }
+};
+
 function App() {
   const [port, setPort] = useState();
-  const [reader, setReader] = useState(null); // State for managing the reader
-  const [displayedData, setDisplayedData] = useState(Array(6).fill(0)); 
+  const [reader, setReader] = useState(null);
+  const [displayedData, dispatch] = useReducer(sensorReducer, Array(6).fill(0));
+  const [bufferedData, setBufferedData] = useState([]);
+  const dataProcessingInterval = 1000; // Interval for processing buffered data
 
+  // Function to open the serial port
   const openSerialPort = async () => {
     if (port) {
       console.log("Serial port is already opened");
@@ -25,6 +38,7 @@ function App() {
     }
   };
 
+  // Function to read data from the serial port
   const readSerialData = async () => {
     if (!port) {
       console.log("Serial port is not set");
@@ -35,12 +49,13 @@ function App() {
       console.log("Reader is already in use");
       return;
     }
-
+  
     const newReader = port.readable.getReader();
     setReader(newReader);
-
+  
     const textDecoder = new TextDecoder();
-
+    let buffer = "";
+  
     try {
       while (true) {
         const { value, done } = await newReader.read();
@@ -49,8 +64,13 @@ function App() {
           setReader(null);
           break;
         }
-        console.log("Received raw data:", value);
-        processSerialData(textDecoder.decode(value));
+        const text = textDecoder.decode(value);
+        buffer += text;
+  
+        if (text.includes('\n')) {
+          processSerialData(buffer);
+          buffer = ""; // Clear the buffer after processing
+        }
       }
     } catch (error) {
       console.error("Error reading from serial port:", error);
@@ -59,19 +79,22 @@ function App() {
     }
   };
 
+  // Function to process the incoming serial data
+  // Function to process the incoming serial data
   const processSerialData = (dataString) => {
     console.log("Processing data string:", dataString);
-  
-    const match = dataString.match(/\b\d+\b/);
-    if (match) {
-      const sensorValue = Number(match[0]);
-      console.log("Processed sensor value:", sensorValue);
-      setDisplayedData(displayedData.map(() => sensorValue));
+    const sensorRegex = /Sensors: ([\d, ]+)/;
+    const match = sensorRegex.exec(dataString);
+    if (match && match[1]) {
+      const sensorValues = match[1].split(',').map(val => Number(val.trim()));
+      console.log("Received sensor values:", sensorValues);
+      dispatch({ type: 'UPDATE_SENSORS', payload: sensorValues });
     } else {
-      console.log("No numeric value found in data string");
+      console.log("No sensor data found in data string");
     }
   };
 
+  // Function to toggle the LED
   const toggleLED = async () => {
     try {
       console.log("toggleLED function called");
@@ -89,22 +112,33 @@ function App() {
       console.error("Error in toggleLED function:", error);
     }
   };
-  
+
+  // Effect to process buffered data at regular intervals
   useEffect(() => {
-    // No need to use interval here as readSerialData already has a while loop
+    const processDataInterval = setInterval(() => {
+      if (bufferedData.length > 0) {
+        dispatch({ type: 'UPDATE_SENSORS', payload: bufferedData });
+        setBufferedData([]);
+      }
+    }, dataProcessingInterval);
+
+    return () => clearInterval(processDataInterval);
+  }, [bufferedData]);
+
+  // Effect to start reading data when the port is set
+  useEffect(() => {
     readSerialData();
 
     return () => {
       if (reader) {
-        reader.cancel(); // Cancel the ongoing read operation
+        reader.cancel();
         reader.releaseLock();
       }
       if (port) {
         port.close();
       }
-      console.log("Cleaned up on component unmount");
     };
-  }, [port]); // Removed reader from the dependency array
+  }, [port]);
 
   return (
     <div className="App">
@@ -140,8 +174,6 @@ function App() {
 }
 
 export default App;
-
-
 
 // import logo from './logo.svg';
 // import './App.css';
