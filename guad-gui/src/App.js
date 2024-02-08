@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer } from 'react';
+import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import SemiCircleProgressBar from "react-progressbar-semicircle";
 import './App.css';
 
