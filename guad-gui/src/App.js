@@ -175,47 +175,52 @@ function App() {
 
   return (
     // Inside your App component's return statement:
-  <div className="App">
-  <button onClick={openSerialPort}>Open Serial Port</button>
-  <button onClick={toggleLED}>Toggle LED</button>
-  <button onClick={() => console.log('Test button clicked')}>Test Button</button>
-
-  <div className="sensor-data-section">
-    <h2>Temperature Sensors</h2>
-    <div className="flex-container">
-      {displayedData.tempSensors.map((temp, index) => (
-        <div className="flex-item" key={`temp-${index}`}>
-          <SemiCircleProgressBar
-            percentage={temp}
-            diameter={100}
-            showPercentValue
-            strokeWidth={20}
-            background={"#f0ad4e"}
-            className="progressBar"
-          />
-          <p>Temp Sensor {index + 1}: {temp}°C</p>
-        </div>
-      ))}
-    </div>
-
-    <h2>Distance Sensors</h2>
-    <div className="flex-container">
-      {displayedData.distanceSensors.map((distance, index) => (
-        <div className="flex-item" key={`distance-${index}`}>
-          <SemiCircleProgressBar
-            percentage={distance / 10} // Assuming you want to scale the distance values for display
-            diameter={100}
-            showPercentValue
-            strokeWidth={20}
-            background={"#5bc0de"}
-            className="progressBar"
-          />
-          <p>Distance Sensor {index + 1}: {distance}cm</p>
-        </div>
-      ))}
+    <div className="App">
+    <div className="container">
+      <button onClick={openSerialPort}>Open Serial Port</button>
+      <button onClick={toggleLED}>Toggle LED</button>
+      <button onClick={() => console.log('Test button clicked')}>Test Button</button>
+  
+      <div className="sensor-data-section">
+        <h2>Temperature Sensors</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Sensor</th>
+              <th>Temperature (°C)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayedData.tempSensors.map((temp, index) => (
+              <tr key={`temp-${index}`}>
+                <td>Temp Sensor {index + 1}</td>
+                <td>{temp}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+  
+        <h2>Distance Sensors</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Sensor</th>
+              <th>Distance (cm)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayedData.distanceSensors.map((distance, index) => (
+              <tr key={`distance-${index}`}>
+                <td>Distance Sensor {index + 1}</td>
+                <td>{distance}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
-</div>
+  
 
   );
 }
