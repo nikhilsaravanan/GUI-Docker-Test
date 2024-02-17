@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
-import SemiCircleProgressBar from "react-progressbar-semicircle";
+import FileWriter from './components/FileWriter';
 import './App.css';
 
 const initialState = {
   tempSensors: Array(10).fill(0),
   distanceSensors: Array(10).fill(0),
+  accelerometer: { x: 0, y: 0, z: 0 },
+  magnetometer: { x: 0, y: 0, z: 0 },
+  gyroscope: { x: 0, y: 0, z: 0 },
+  gapHeightSensors: Array(2).fill(0),
 };
 
 const sensorReducer = (state, action) => {
@@ -13,6 +17,14 @@ const sensorReducer = (state, action) => {
       return { ...state, tempSensors: action.payload };
     case 'UPDATE_DISTANCE_SENSORS':
       return { ...state, distanceSensors: action.payload };
+    case 'UPDATE_ACCELEROMETER':
+      return { ...state, accelerometer: action.payload };
+    case 'UPDATE_MAGNETOMETER':
+      return { ...state, magnetometer: action.payload };
+    case 'UPDATE_GYROSCOPE':
+      return { ...state, gyroscope: action.payload };
+    case 'UPDATE_GAP_HEIGHT_SENSORS':
+      return { ...state, gapHeightSensors: action.payload };
     default:
       return state;
   }
@@ -34,10 +46,30 @@ function App() {
     dispatch({ type: 'UPDATE_DISTANCE_SENSORS', payload: values });
   };
 
+  const processAccelerometerData = (values) => {
+    dispatch({ type: 'UPDATE_ACCELEROMETER', payload: { x: values[0], y: values[1], z: values[2] } });
+  };
+
+  const processMagnetometerData = (values) => {
+    dispatch({ type: 'UPDATE_MAGNETOMETER', payload: { x: values[0], y: values[1], z: values[2] } });
+  };
+
+  const processGyroscopeData = (values) => {
+    dispatch({ type: 'UPDATE_GYROSCOPE', payload: { x: values[0], y: values[1], z: values[2] } });
+  };
+
+  const processGapHeightData = (values) => {
+    dispatch({ type: 'UPDATE_GAP_HEIGHT_SENSORS', payload: values });
+  };
+
   // Map packet identifiers to their processing functions
   const packetHandlers = {
     "Temp Sensors": processTempSensorsData,
     "Distance": processDistanceData,
+    "Accelerometer": processAccelerometerData,
+    "Magnetometer": processMagnetometerData,
+    "Gyroscope": processGyroscopeData,
+    "Gap Height": processGapHeightData,
     // Future packet types and their handler functions will be added here
   };
 
@@ -174,55 +206,121 @@ function App() {
   }, [port]);
 
   return (
-    // Inside your App component's return statement:
     <div className="App">
-    <div className="container">
-      <button onClick={openSerialPort}>Open Serial Port</button>
-      <button onClick={toggleLED}>Toggle LED</button>
-      <button onClick={() => console.log('Test button clicked')}>Test Button</button>
+      <div className="container">
+        <button onClick={openSerialPort}>Open Serial Port</button>
+        <button onClick={toggleLED}>Toggle LED</button>
+        <button onClick={() => console.log('Test button clicked')}>Test Button</button>
+        <FileWriter data={displayedData} />
   
-      <div className="sensor-data-section">
-        <h2>Temperature Sensors</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Sensor</th>
-              <th>Temperature (°C)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedData.tempSensors.map((temp, index) => (
-              <tr key={`temp-${index}`}>
-                <td>Temp Sensor {index + 1}</td>
-                <td>{temp}</td>
+        <div className="sensors-container">
+          <div className="sensor-data-section">
+            {/* Sensor Data for Accelerometer, Gyroscope, and Magnetometer */}
+            <h2>Sensor Data</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Sensor</th>
+                  <th>X</th>
+                  <th>Y</th>
+                  <th>Z</th>
+                  <th>Units</th>
+                </tr>
+              </thead>
+              <tbody>
+              <tr>
+                <td>Accelerometer</td>
+                <td>{displayedData.accelerometer.x}</td>
+                <td>{displayedData.accelerometer.y}</td>
+                <td>{displayedData.accelerometer.z}</td>
+                <td>m/s²</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
+              <tr>
+                <td>Gyroscope</td>
+                <td>{displayedData.gyroscope.x}</td>
+                <td>{displayedData.gyroscope.y}</td>
+                <td>{displayedData.gyroscope.z}</td>
+                <td>rad/s</td>
+              </tr>
+              {/* Optionally, add Magnetometer data in similar fashion if needed */}
+              <tr>
+                <td>Magnetometer</td>
+                <td>{displayedData.magnetometer.x}</td>
+                <td>{displayedData.magnetometer.y}</td>
+                <td>{displayedData.magnetometer.z}</td>
+                <td>µT</td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
   
-        <h2>Distance Sensors</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Sensor</th>
-              <th>Distance (cm)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedData.distanceSensors.map((distance, index) => (
-              <tr key={`distance-${index}`}>
-                <td>Distance Sensor {index + 1}</td>
-                <td>{distance}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <div className="sensor-data-section">
+            <h2>Gap Height Sensors</h2>
+            <div className="barsContainer">
+              {displayedData.gapHeightSensors.map((gapHeight, index) => (
+                <div key={`gapHeight-${index}`}>
+                  <div className="labelSide">20mm</div>
+                  <div className="gapHeightBarContainer">
+                    {/* Invert the moving bar's position logic */}
+                    <div
+                      className="movingBar"
+                      style={{ 
+                        top: `${((gapHeight / 20)) * 100}%`, // Invert movement
+                        transition: 'top 0.3s ease', // Smooth transition for the movement
+                        backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
+                           gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
+                           '#FF0000' // Red for 13-20
+                      }}
+                    ></div>
+                  </div>
+                  <div className="valueIndicator">{gapHeight}mm</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="sensor-data-section">
+            <h2>Temperature Sensors</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Sensor</th>
+                  <th>Temperature (°C)</th>
+                </tr>
+              </thead>
+              <tbody>
+                  {displayedData.tempSensors.map((temp, index) => (
+                  <tr key={`temp-${index}`}>
+                    <td>Temp Sensor {index + 1}</td>
+                    <td>{temp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+  
+          <div className="sensor-data-section">
+            <h2>Distance Sensors</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Sensor</th>
+                  <th>Distance (cm)</th>
+                </tr>
+              </thead>
+              <tbody>
+                  {displayedData.distanceSensors.map((distance, index) => (
+                  <tr key={`distance-${index}`}>
+                    <td>Distance Sensor {index + 1}</td>
+                    <td>{distance}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+);}
   
-
-  );
-}
-
-export default App;
+  export default App;
