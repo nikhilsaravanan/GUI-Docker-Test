@@ -119,6 +119,24 @@ tr:nth-child(even) {
   position: absolute;
 }
 
+/* Add this to your CSS file */
+.numeric-column {
+  min-width: 40px;
+  /* Adjust as needed */
+  text-align: right;
+  /* Aligns numeric data to the right */
+}
+
+.disconnected-banner {
+  background-color: #ffcccc;
+  color: #cc0000;
+  padding: 10px;
+  text-align: center;
+  margin-bottom: 20px;
+  border-radius: 5px;
+}
+
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .sensors-container {

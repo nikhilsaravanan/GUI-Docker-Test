@@ -18,8 +18,14 @@ const FileWriter = ({ data }) => {
     if (!fileWriter || !data) return; // Exit if fileWriter or data is not available
   
     try {
-      // Convert data to a Blob object
-      const blob = new Blob([JSON.stringify(data)], { type: 'text/plain' });
+      // Get current time without date
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  
+      // Combine timestamp with data
+      const content = `${timestamp}: ${JSON.stringify(data)}\n`;
+  
+      // Convert content to a Blob object
+      const blob = new Blob([content], { type: 'text/plain' });
   
       // Write the Blob to the file
       await fileWriter.write(blob);

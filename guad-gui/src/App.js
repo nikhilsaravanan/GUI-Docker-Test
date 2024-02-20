@@ -5,10 +5,10 @@ import './App.css';
 const initialState = {
   tempSensors: Array(10).fill(0),
   distanceSensors: Array(10).fill(0),
-  accelerometer: { x: 0, y: 0, z: 0 },
-  magnetometer: { x: 0, y: 0, z: 0 },
-  gyroscope: { x: 0, y: 0, z: 0 },
-  gapHeightSensors: Array(2).fill(0),
+  accelerometer: { x: 0.00, y: 0.00, z: 0.00 },
+  magnetometer: { x: 0.00, y: 0.00, z: 0.00 },
+  gyroscope: { x: 0.00, y: 0.00, z: 0.00 },
+  gapHeightSensors: Array(2).fill(0.00),
 };
 
 const sensorReducer = (state, action) => {
@@ -35,6 +35,7 @@ function App() {
   const [reader, setReader] = useState(null);
   const [displayedData, dispatch] = useReducer(sensorReducer, initialState);
   const [bufferedData, setBufferedData] = useState([]);
+  const [podConnected, setPodConnected] = useState(false);
   const dataProcessingInterval = 1000; // Interval for processing buffered data
 
   // Modular approach for processing different sensor data packets
@@ -73,17 +74,23 @@ function App() {
     // Future packet types and their handler functions will be added here
   };
 
-  // Utility function to extract sensor values from a data string
+    // Utility function to extract sensor values from a data string
   const extractSensorValues = (dataString) => {
-    const sensorRegex = /[\d]+/g; // Matches any number of digits
+    // This regex matches both integer and floating-point numbers
+    const sensorRegex = /-?\d+(\.\d+)?/g; 
     const matches = dataString.match(sensorRegex);
-    return matches ? matches.map(Number) : [];
+    return matches ? matches.map(parseFloat) : [];
   };
 
-  // Main function to process the incoming serial data
   const processSerialData = (dataString) => {
     console.log("Processing data string:", dataString);
-
+  
+    if (dataString.trim() === "lost") {
+      setPodConnected(false);
+    } else {
+      setPodConnected(true);
+    }
+  
     // Dynamically identify and process different sensor packets
     Object.keys(packetHandlers).forEach((key) => {
       if (dataString.startsWith(key)) {
@@ -92,24 +99,29 @@ function App() {
       }
     });
   };
+  
 
-  // Function to open the serial port
   const openSerialPort = async () => {
     if (port) {
       console.log("Serial port is already opened");
       return;
     }
-
+  
     try {
       const tempPort = await navigator.serial.requestPort();
       await tempPort.open({ baudRate: 115200 });
       setPort(tempPort);
       console.log("Serial port opened");
       readSerialData(); // Start reading after opening the port
+      // Optionally set podConnected to true here if you want immediate feedback
+      // setPodConnected(true);
     } catch (error) {
       console.error("Failed to open serial port:", error);
+      // Consider setting podConnected to false here to indicate failure to connect
+      setPodConnected(false);
     }
   };
+  
 
   // Function to read data from the serial port
   const readSerialData = async () => {
@@ -178,6 +190,24 @@ function App() {
     }
   };
 
+  const sendCommand = useCallback(async (command) => {
+    if (!port || !port.writable) {
+      console.log("Port is not open or writable");
+      return;
+    }
+  
+    try {
+      console.log(`Sending command: ${command}`);
+      const writer = port.writable.getWriter();
+      const data = new TextEncoder().encode(`${command}\n`);
+      await writer.write(data);
+      writer.releaseLock();
+      // await writeDataToFile(data);
+    } catch (error) {
+      console.error("Error sending command:", error);
+    }
+  }, [port]); // Dependency array includes `port` since the function uses it
+
   // Effect to process buffered data at regular intervals
   useEffect(() => {
     const processDataInterval = setInterval(() => {
@@ -205,12 +235,25 @@ function App() {
     };
   }, [port]);
 
+  function formatNumberWithSign(number) {
+    // Ensure the number has exactly two decimal places
+    const fixedNumber = number.toFixed(2);
+    // Prepend a plus sign for positive numbers
+    return number >= 0 ? `+${fixedNumber}` : fixedNumber;
+  }
+
   return (
     <div className="App">
       <div className="container">
+      {!podConnected && (
+        <div className="disconnected-banner">
+          Pod Disconnected
+        </div>
+      )}
         <button onClick={openSerialPort}>Open Serial Port</button>
         <button onClick={toggleLED}>Toggle LED</button>
-        <button onClick={() => console.log('Test button clicked')}>Test Button</button>
+        <button onClick={() => sendCommand('1')}>Levitation On</button>
+        <button onClick={() => sendCommand('0')}>Levitation Off</button>
         <FileWriter data={displayedData} />
   
         <div className="sensors-container">
@@ -221,33 +264,33 @@ function App() {
               <thead>
                 <tr>
                   <th>Sensor</th>
-                  <th>X</th>
-                  <th>Y</th>
-                  <th>Z</th>
+                  <th className="numeric-column">X</th>
+                  <th className="numeric-column">Y</th>
+                  <th className="numeric-column">Z</th>
                   <th>Units</th>
                 </tr>
               </thead>
               <tbody>
               <tr>
                 <td>Accelerometer</td>
-                <td>{displayedData.accelerometer.x}</td>
-                <td>{displayedData.accelerometer.y}</td>
-                <td>{displayedData.accelerometer.z}</td>
+                <td className="numeric-column">{displayedData.accelerometer.x.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.accelerometer.y.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.accelerometer.z.toFixed(2)}</td>
                 <td>m/s²</td>
               </tr>
               <tr>
                 <td>Gyroscope</td>
-                <td>{displayedData.gyroscope.x}</td>
-                <td>{displayedData.gyroscope.y}</td>
-                <td>{displayedData.gyroscope.z}</td>
+                <td className="numeric-column">{displayedData.gyroscope.x.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.gyroscope.y.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.gyroscope.z.toFixed(2)}</td>
                 <td>rad/s</td>
               </tr>
               {/* Optionally, add Magnetometer data in similar fashion if needed */}
               <tr>
                 <td>Magnetometer</td>
-                <td>{displayedData.magnetometer.x}</td>
-                <td>{displayedData.magnetometer.y}</td>
-                <td>{displayedData.magnetometer.z}</td>
+                <td className="numeric-column">{displayedData.magnetometer.x.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.magnetometer.y.toFixed(2)}</td>
+                <td className="numeric-column">{displayedData.magnetometer.z.toFixed(2)}</td>
                 <td>µT</td>
               </tr>
               </tbody>
@@ -265,7 +308,7 @@ function App() {
                     <div
                       className="movingBar"
                       style={{ 
-                        top: `${((gapHeight / 20)) * 100}%`, // Invert movement
+                        top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
                         transition: 'top 0.3s ease', // Smooth transition for the movement
                         backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
                            gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
@@ -273,13 +316,14 @@ function App() {
                       }}
                     ></div>
                   </div>
-                  <div className="valueIndicator">{gapHeight}mm</div>
+                  <div className="valueIndicator">
+                    {gapHeight.toFixed(2)}mm</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="sensor-data-section">
+          {/* <div className="sensor-data-section">
             <h2>Temperature Sensors</h2>
             <table>
               <thead>
@@ -317,7 +361,7 @@ function App() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
