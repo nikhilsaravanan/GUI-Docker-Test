@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import SemiCircleProgressBar from "react-progressbar-semicircle";
 import FileWriter from './components/FileWriter';
 import './App.css';
 
@@ -8,7 +9,7 @@ const initialState = {
   accelerometer: { x: 0.00, y: 0.00, z: 0.00 },
   magnetometer: { x: 0.00, y: 0.00, z: 0.00 },
   gyroscope: { x: 0.00, y: 0.00, z: 0.00 },
-  gapHeightSensors: Array(2).fill(0.00),
+  gapHeightSensors: Array(8).fill(0.00),
 };
 
 const sensorReducer = (state, action) => {
@@ -36,7 +37,33 @@ function App() {
   const [displayedData, dispatch] = useReducer(sensorReducer, initialState);
   const [bufferedData, setBufferedData] = useState([]);
   const [podConnected, setPodConnected] = useState(false);
+  const [podStatus, setPodStatus] = useState({
+    brakes: 'OK',
+    CCU: 'OK',
+    VCU: 'OK',
+    BMS: 'OK',
+  });
+  const [podData, setPodData] = useState({
+    speed: 0,
+    acceleration: 0,
+  });
+  const [errors, setErrors] = useState([
+    { name: 'Main Emergency', status: 'OK', message: 'No emergency' },
+    { name: 'CCU Error', status: 'OK', message: 'No CCU error' },
+    { name: 'VCU Error', status: 'OK', message: 'No VCU error' }
+  ]);
   const dataProcessingInterval = 1000; // Interval for processing buffered data
+
+  const updateError = (name, status, message) => {
+    setErrors(prevErrors => {
+      return prevErrors.map(error => {
+        if (error.name === name) {
+          return { ...error, status, message };
+        }
+        return error;
+      });
+    });
+  };
 
   // Modular approach for processing different sensor data packets
   const processTempSensorsData = (values) => {
@@ -250,16 +277,83 @@ function App() {
           Pod Disconnected
         </div>
       )}
+      <div className="navbar">
+        {/* Navbar with buttons */}
         <button onClick={openSerialPort}>Open Serial Port</button>
         <button onClick={toggleLED}>Toggle LED</button>
         <button onClick={() => sendCommand('1')}>Levitation On</button>
         <button onClick={() => sendCommand('0')}>Levitation Off</button>
+        <button onClick={() => sendCommand('1')}>Run</button>
+        <button onClick={() => sendCommand('1')}>Emergency Stop</button>
+        <button onClick={() => sendCommand('1')}>Reset</button>
         <FileWriter data={displayedData} />
+      </div>
   
+      <div className="hero-section">
+      <div className="errors-section">
+            <h4>Errors</h4>
+            {/* Display error rectangles */}
+            {errors.map((error, index) => (
+              <div
+                key={index}
+                className={`error-rectangle ${error.status === 'OK' ? 'grey' : 'red'}`}
+                onClick={() => updateError(error.name, 'OK', '')}
+              >
+                {error.name}
+                {error.status !== 'OK' && <div className="error-message">{error.message}</div>}
+              </div>
+            ))}
+          </div>
+
+        <div className="pod-status-section">
+          <h4>Pod Status</h4>
+          {/* Pod status indicators */}
+          <div className="pod-status">
+            {/* Display status of brakes, CCU, VCU, and BMS */}
+            <div>Brakes: {podStatus.brakes}</div>
+            <div>CCU: {podStatus.CCU}</div>
+            <div>VCU: {podStatus.VCU}</div>
+            <div>BMS: {podStatus.BMS}</div>
+          </div>
+        </div>
+        <div className="speed-acceleration-section">
+          <h4>Speed & Acceleration</h4>
+          {/* Display speed and acceleration as progress bars */}
+          <div className="progress-bars">
+            <div className="progress-bar">
+              <p>Speed</p>
+              <SemiCircleProgressBar 
+                percentage={podData.speed} 
+                diameter={200} 
+                showPercentValue={false}
+                strokeWidth={20} 
+                background={"#202226"} 
+                className="progressBar" 
+                style={{ right: "100" }} 
+              />
+              <p className="unit">m/s</p>
+            </div>
+            <div className="progress-bar">
+              <p>Acceleration</p>
+              <SemiCircleProgressBar 
+                percentage={podData.acceleration} 
+                diameter={200} 
+                showPercentValue={false}
+                strokeWidth={20} 
+                background={"#202226"} 
+                className="progressBar" 
+                style={{ right: "100" }} 
+              />
+              <p className="unit">m²/s</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
         <div className="sensors-container">
           <div className="sensor-data-section">
             {/* Sensor Data for Accelerometer, Gyroscope, and Magnetometer */}
-            <h2>Sensor Data</h2>
+            <h4>IMU</h4>
             <table>
               <thead>
                 <tr>
@@ -298,7 +392,7 @@ function App() {
           </div>
   
           <div className="sensor-data-section">
-            <h2>Gap Height Sensors</h2>
+            <h4>Gap Height Sensors</h4>
             <div className="barsContainer">
               {displayedData.gapHeightSensors.map((gapHeight, index) => (
                 <div key={`gapHeight-${index}`}>
@@ -324,7 +418,7 @@ function App() {
           </div>
 
           {/* <div className="sensor-data-section">
-            <h2>Temperature Sensors</h2>
+            <h4>Temperature Sensors</h4>
             <table>
               <thead>
                 <tr>
@@ -344,7 +438,7 @@ function App() {
           </div>
   
           <div className="sensor-data-section">
-            <h2>Distance Sensors</h2>
+            <h4>Distance Sensors</h4>
             <table>
               <thead>
                 <tr>
