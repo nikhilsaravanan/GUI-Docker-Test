@@ -53,7 +53,7 @@ tr:nth-child(even) {
 
 /* Additional styling for responsiveness and aesthetics */
 .container {
-  max-width: 960px;
+  max-width: 1400px;
   margin: auto;
 }
 
@@ -78,11 +78,11 @@ tr:nth-child(even) {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  height: 200px;
-  width: 50px;
+  height: 100px;
+  width: 30px;
   border: 2px solid #004aad;
   position: relative;
-  margin: 0 20px;
+  margin: 0 10px;
   /* Increase margin to make room for labels */
   background-color: #f0f0f0;
 }
@@ -101,6 +101,7 @@ tr:nth-child(even) {
 
 .valueIndicator {
   margin-top: 10px;
+  font-size: 12px;
 }
 
 .barsContainer {
@@ -136,6 +137,62 @@ tr:nth-child(even) {
   border-radius: 5px;
 }
 
+.navbar {
+  display: flex;
+
+}
+
+.hero-section {
+  display: flex;
+  justify-content: space-between;
+  /* Distribute space evenly between sections */
+  align-items: flex-start;
+  /* Align sections at the top */
+}
+
+.errors-section {
+  flex: 1;
+  /* Take up one-third of the available space */
+  margin-right: 20px;
+  /* Add some spacing between sections */
+}
+
+.pod-status-section {
+  flex: 1;
+  /* Take up one-third of the available space */
+  margin-right: 20px;
+  /* Add some spacing between sections */
+}
+
+.speed-acceleration-section {
+  flex: 1;
+  /* Take up one-third of the available space */
+}
+
+.error-rectangle {
+  width: 150px;
+  height: 50px;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.error-rectangle.grey {
+  background-color: #ccc;
+}
+
+.error-rectangle.red {
+  background-color: #ffcccc;
+  border-color: #ff0000;
+}
+
+.error-message {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #ff0000;
+}
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
