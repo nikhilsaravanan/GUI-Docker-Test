@@ -1,69 +1,229 @@
 body,
 html {
+  background-color: #1e1e1e;
+  /* Dark background */
+  color: #E0E0E0;
+  /* Light text */
+  font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-  font-family: Arial, sans-serif;
-  background-color: #f4f4f4;
+  overflow-x: hidden;
+  /* Prevent horizontal scrolling */
 }
 
-/* Styling for the App container */
 .App {
-  text-align: center;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-/* Button styling */
+.navbar-top {
+  background-color: #333333;
+  /* Darker shade for navbar */
+  color: #ffffff;
+  /* White text */
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content,
+.side-panel {
+  background-color: #1e1e1e;
+  /* Dark background for content areas */
+  color: #ffffff;
+  /* White text */
+}
+
+.side-panel {
+  background-color: #2a2a2a;
+  /* Slightly different shade for panel */
+  padding: 10px;
+  overflow-y: auto;
+  /* Scrollable */
+  box-shadow: -2px 0 4px #000000;
+  /* Subtle shadow for depth */
+}
+
+.sensor-data-section,
+.console {
+  background-color: #252525;
+  /* Container backgrounds */
+  border-radius: 8px;
+  padding: 5px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  /* More pronounced shadow */
+}
+
+.console {
+  margin-top: auto;
+}
+
+.main-content {
+  flex: 2;
+  /* Takes 2/3 of the space */
+  padding: 10px;
+}
+
+/* Style adjustments for buttons, tables, etc., can follow from here */
+/* Ensure button, tab, table, and other component styles are correctly applied */
+
+/* Ensure tab content visibility */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active-tab-content {
+  display: block;
+  /* For contrast */
+  padding: 0px;
+  margin-top: 0px;
+}
+
+.logo {
+  height: 25px;
+  padding: 5px;
+  /* Adjust the size of the logo as needed */
+}
+
 button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  margin: 10px;
+  background-color: #323232;
+  /* Dark button background */
+  color: #ffffff;
+  /* White text */
+  border: 1px solid #5c5c5c;
+  /* Slightly lighter border */
+  padding: 8px 16px;
+  margin: 4px;
   border-radius: 5px;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s;
 }
 
 button:hover {
-  background-color: #0056b3;
+  background-color: #505050;
+  /* Lighter on hover */
 }
 
-/* Table styling */
+.tabs button {
+  background-color: #424242;
+  /* Dark tab background */
+  color: #ffffff;
+  /* White text */
+  padding: 8px 16px;
+}
+
+.tabs button.active {
+  background-color: #535353;
+  /* Active tab */
+}
+
+.pod-image {
+  width: 100%;
+  /* Or the width you want */
+  height: auto;
+  /* Maintain aspect ratio */
+}
+
+.status-overlay {
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.5);
+  /* Semi-transparent white */
+  padding: 5px;
+  border-radius: 5px;
+  /* Add more styling as needed */
+}
+
+.container {
+  display: flex;
+  flex-direction: row;
+  /* This is default but can be explicitly set */
+  justify-content: space-between;
+  /* Adjust as necessary */
+}
+
+
+.main-content {
+  flex: 1 1 70%;
+  /* Takes up 2/3 of the container */
+  padding: 10px;
+}
+
+.console h4,
+p {
+  font-size: 15px;
+}
+
+/* Tab and Tab Content Styling */
+.tabs {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 10px;
+}
+
+.tab-content {
+  display: none;
+  /* Hide all tab content by default */
+}
+
+.active-tab-content {
+  display: block;
+  /* Show the active tab content */
+}
+
 table {
   width: 100%;
-  margin-top: 20px;
+  min-width: 400px;
   border-collapse: collapse;
 }
 
 th,
 td {
+  border-bottom: 1px solid #3d3d3d;
+  /* Darker lines for separation */
+  padding: 6px;
   text-align: left;
-  padding: 8px;
+  font-size: 12px;
 }
 
 th {
-  background-color: #007bff;
-  color: white;
+  background-color: #323232;
+  /* Header background */
+  color: #ffffff;
 }
 
-td,
 tr:nth-child(even) {
-  background-color: #f2f2f2;
+  background-color: #292929;
+  /* Zebra striping for rows */
 }
 
-/* Additional styling for responsiveness and aesthetics */
-.container {
-  max-width: 1400px;
-  margin: auto;
+
+/* Responsive Design Adjustments */
+@media (max-width: 1024px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .main-content,
+  .side-panel {
+    flex-basis: 100%;
+  }
 }
 
-.sensor-data-section {
-  background-color: #ffffff;
-  padding: 20px;
-  margin: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  flex: 1;
+
+/* Additional Styling as needed */
+/* Include styles for buttons, status overlay, pod image container, and any other specific styles you require */
+
+.sensor-data-section h4 {
+  margin: 5px;
+  font-size: 14px;
+}
+
+.sensor-data-section h5 {
+  padding: 0px;
+  margin: 0;
 }
 
 .sensors-container {
@@ -78,8 +238,8 @@ tr:nth-child(even) {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  height: 100px;
-  width: 30px;
+  height: 80px;
+  width: 25px;
   border: 2px solid #004aad;
   position: relative;
   margin: 0 10px;
@@ -137,18 +297,39 @@ tr:nth-child(even) {
   border-radius: 5px;
 }
 
-.navbar {
-  display: flex;
-
+.button-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-width: 300px;
+  flex-wrap: wrap;
 }
 
+/* Assuming hero-section is the flex container for col1 and col2 */
 .hero-section {
   display: flex;
   justify-content: space-between;
-  /* Distribute space evenly between sections */
+  /* Adjusted to ensure no unwanted space */
   align-items: flex-start;
-  /* Align sections at the top */
+  width: 100%;
+  /* Ensure the container takes full width */
 }
+
+.col1,
+.col2 {
+  flex: 1;
+  /* This makes both columns take up equal space */
+  /* If you want col1 to be wider or narrower, adjust the flex-basis or add specific width */
+}
+
+/* Remove any unnecessary margin or padding that might cause gaps */
+.col1,
+.col2 {
+  margin-right: 10px;
+  /* Add margin to the right of col1 if needed, remove if not */
+  padding: 0;
+  /* Adjust based on your layout needs */
+}
+
 
 .errors-section {
   flex: 1;
@@ -157,16 +338,101 @@ tr:nth-child(even) {
   /* Add some spacing between sections */
 }
 
-.pod-status-section {
-  flex: 1;
-  /* Take up one-third of the available space */
-  margin-right: 20px;
-  /* Add some spacing between sections */
+.pod-image-container {
+  position: relative;
+  width: 60%;
+  /* Adjust as needed */
+  padding: 40px;
+  /* Keeps the image from touching the edges */
+  display: flex;
+  justify-content: center;
+  /* Centers the content horizontally */
+  align-items: center;
+  /* Centers the content vertically */
 }
 
+.pod-status-grid {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 10px;
+  background-color: rgba(0, 0, 0, 0.75);
+  /* Slightly darker for contrast */
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  /* Optional: Adds depth */
+  width: auto;
+  /* Adjust width as needed */
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  color: #E0E0E0;
+  /* Light text color */
+}
+
+.status-indicator {
+  height: 15px;
+  width: 15px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.status-indicator.ok {
+  background-color: #00FF00;
+  /* Green for OK */
+}
+
+.status-indicator.error {
+  background-color: #FF0000;
+  /* Red for error */
+}
+
+.status-indicator.warning {
+  background-color: #FFFF00;
+  /* Yellow for warning */
+}
+
+
+/* Ensure the speed-acceleration-section container uses flexbox to layout its children */
 .speed-acceleration-section {
+  display: flex;
+  justify-content: space-evenly;
+  flex-wrap: nowrap;
+  /* This distributes space evenly around each item */
+  align-items: center;
+  /* This centers the items vertically */
+  width: 100%;
+  /* Ensure it takes the full width of its parent to utilize space */
+}
+
+.progress-bars {
+  display: flex;
+  justify-content: space-evenly;
+  flex-wrap: nowrap;
+  /* This distributes space evenly around each item */
+  align-items: center;
+  /* This centers the items vertically */
+  width: 100%;
+  /* Ensure it takes the full width of its parent to utilize space */
+}
+
+.progress-bar {
   flex: 1;
-  /* Take up one-third of the available space */
+  /* Allow each progress bar to grow as needed, sharing the space */
+  margin: 0 10px;
+  /* Optional: add some space between the dials */
+  /* Adjust the margin as needed for your design */
+}
+
+/* If your progress bars are too wide or too narrow, you can adjust their flex-basis or add max-width */
+.progress-bar {
+  flex-basis: 100px;
+  /* Example: Adjust based on your needs */
+  max-width: 200px;
+  /* Prevents the bar from becoming too wide */
 }
 
 .error-rectangle {
@@ -192,11 +458,4 @@ tr:nth-child(even) {
   margin-top: 5px;
   font-size: 12px;
   color: #ff0000;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .sensors-container {
-    flex-direction: column;
-  }
 }

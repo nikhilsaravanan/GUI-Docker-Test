@@ -1,31 +1,48 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import SemiCircleProgressBar from "react-progressbar-semicircle";
 import FileWriter from './components/FileWriter';
+import logo from './components/white_guad.png'; // Make sure the path is correct
+import podImage from './components/pod_top.png';
 import './App.css';
 
 const initialState = {
-  tempSensors: Array(10).fill(0),
-  distanceSensors: Array(10).fill(0),
-  accelerometer: { x: 0.00, y: 0.00, z: 0.00 },
-  magnetometer: { x: 0.00, y: 0.00, z: 0.00 },
-  gyroscope: { x: 0.00, y: 0.00, z: 0.00 },
+  tempSensors: Array(12).fill(0),
+  hallEffectSensors: Array(8).fill(0),
+  imuData: {
+    rear: {
+      accelerometer: { x: 0, y: 0, z: 0 },
+      gyroscope: { x: 0, y: 0, z: 0 }
+    },
+    center: {
+      accelerometer: { x: 0, y: 0, z: 0 },
+      gyroscope: { x: 0, y: 0, z: 0 }
+    },
+    front: {
+      accelerometer: { x: 0, y: 0, z: 0 },
+      gyroscope: { x: 0, y: 0, z: 0 }
+    }
+  },
   gapHeightSensors: Array(8).fill(0.00),
+  batteryVoltages: Array(144).fill(0.00),
 };
 
 const sensorReducer = (state, action) => {
   switch (action.type) {
     case 'UPDATE_TEMP_SENSORS':
       return { ...state, tempSensors: action.payload };
-    case 'UPDATE_DISTANCE_SENSORS':
-      return { ...state, distanceSensors: action.payload };
-    case 'UPDATE_ACCELEROMETER':
-      return { ...state, accelerometer: action.payload };
-    case 'UPDATE_MAGNETOMETER':
-      return { ...state, magnetometer: action.payload };
-    case 'UPDATE_GYROSCOPE':
-      return { ...state, gyroscope: action.payload };
+    case 'UPDATE_HALL_EFFECT_SENSORS':
+      return { ...state, hallEffectSensorsSensors: action.payload };
     case 'UPDATE_GAP_HEIGHT_SENSORS':
       return { ...state, gapHeightSensors: action.payload };
+      case 'UPDATE_IMU_DATA':
+      const { position, data } = action.payload;
+      return {
+        ...state,
+        imuData: {
+          ...state.imuData,
+          [position]: data
+        }
+      };
     default:
       return state;
   }
@@ -37,6 +54,7 @@ function App() {
   const [displayedData, dispatch] = useReducer(sensorReducer, initialState);
   const [bufferedData, setBufferedData] = useState([]);
   const [podConnected, setPodConnected] = useState(false);
+  const [commandToBeSent, setCommand] = useState("");
   const [podStatus, setPodStatus] = useState({
     brakes: 'OK',
     CCU: 'OK',
@@ -53,6 +71,33 @@ function App() {
     { name: 'VCU Error', status: 'OK', message: 'No VCU error' }
   ]);
   const dataProcessingInterval = 1000; // Interval for processing buffered data
+  const [activeTab, setActiveTab] = useState('battery'); // Default active tab
+  // Calculate low, high, and average temperatures
+  const lowTemperature = Math.min(...displayedData.tempSensors);
+  const highTemperature = Math.max(...displayedData.tempSensors);
+  const averageTemperature = displayedData.tempSensors.reduce((acc, curr) => acc + curr, 0) / displayedData.tempSensors.length;
+
+  // Ensure values are finite or set a default/fallback value
+  const lowTemp = isFinite(lowTemperature) ? lowTemperature.toFixed(2) : 'N/A';
+  const highTemp = isFinite(highTemperature) ? highTemperature.toFixed(2) : 'N/A';
+  const avgTemp = isFinite(averageTemperature) ? averageTemperature.toFixed(2) : 'N/A';
+
+  const highestCellVoltage = Math.max(...displayedData.batteryVoltages);
+  const lowestCellVoltage = Math.min(...displayedData.batteryVoltages);
+  const averageCellVoltage = displayedData.batteryVoltages.length > 0 
+    ? displayedData.batteryVoltages.reduce((acc, curr) => acc + curr, 0) / displayedData.batteryVoltages.length 
+    : 0;
+
+  // Format to two decimal places
+  const highestVoltage = isFinite(highestCellVoltage) ? highestCellVoltage.toFixed(2) : 'N/A';
+  const lowestVoltage = isFinite(lowestCellVoltage) ? lowestCellVoltage.toFixed(2) : 'N/A';
+  const averageVoltage = isFinite(averageCellVoltage) ? averageCellVoltage.toFixed(2) : 'N/A';
+
+
+  // Function to change the active tab
+  const handleTabChange = (tabName) => {
+    setActiveTab(tabName);
+  };
 
   const updateError = (name, status, message) => {
     setErrors(prevErrors => {
@@ -70,34 +115,43 @@ function App() {
     dispatch({ type: 'UPDATE_TEMP_SENSORS', payload: values });
   };
 
-  const processDistanceData = (values) => {
-    dispatch({ type: 'UPDATE_DISTANCE_SENSORS', payload: values });
+  const processHallEffectData = (values) => {
+    dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values });
   };
 
-  const processAccelerometerData = (values) => {
-    dispatch({ type: 'UPDATE_ACCELEROMETER', payload: { x: values[0], y: values[1], z: values[2] } });
-  };
-
-  const processMagnetometerData = (values) => {
-    dispatch({ type: 'UPDATE_MAGNETOMETER', payload: { x: values[0], y: values[1], z: values[2] } });
-  };
-
-  const processGyroscopeData = (values) => {
-    dispatch({ type: 'UPDATE_GYROSCOPE', payload: { x: values[0], y: values[1], z: values[2] } });
+  const processIMUData = (position, values) => {
+    if (position === 'Rear') {
+      dispatch({ type: 'UPDATE_REAR_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
+    } else if (position === 'Center') {
+      dispatch({ type: 'UPDATE_CENTER_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
+    } else if (position === 'Front') {
+      dispatch({ type: 'UPDATE_FRONT_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
+    }
   };
 
   const processGapHeightData = (values) => {
     dispatch({ type: 'UPDATE_GAP_HEIGHT_SENSORS', payload: values });
   };
 
+  const processBatteryData = (values) => {
+    dispatch({ type: 'UPDATE_BATTERY_VOLTAGES', payload: values });
+  };  
+
   // Map packet identifiers to their processing functions
   const packetHandlers = {
     "Temp Sensors": processTempSensorsData,
-    "Distance": processDistanceData,
-    "Accelerometer": processAccelerometerData,
-    "Magnetometer": processMagnetometerData,
-    "Gyroscope": processGyroscopeData,
+    "Hall Effect": processHallEffectData,
+    "Rear IMU Data": (values) => {
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    },
+    "Center IMU Data": (values) => {
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    },
+    "Front IMU Data": (values) => {
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    },
     "Gap Height": processGapHeightData,
+    "Battery Data": processBatteryData,
     // Future packet types and their handler functions will be added here
   };
 
@@ -226,6 +280,7 @@ function App() {
     try {
       console.log(`Sending command: ${command}`);
       const writer = port.writable.getWriter();
+      setCommand("A COMMAND WAS SENT TO THE POD: " + command);
       const data = new TextEncoder().encode(`${command}\n`);
       await writer.write(data);
       writer.releaseLock();
@@ -271,194 +326,356 @@ function App() {
 
   return (
     <div className="App">
-      <div className="container">
-      {!podConnected && (
-        <div className="disconnected-banner">
-          Pod Disconnected
-        </div>
-      )}
-      <div className="navbar">
-        {/* Navbar with buttons */}
-        <button onClick={openSerialPort}>Open Serial Port</button>
-        <button onClick={toggleLED}>Toggle LED</button>
-        <button onClick={() => sendCommand('1')}>Levitation On</button>
-        <button onClick={() => sendCommand('0')}>Levitation Off</button>
-        <button onClick={() => sendCommand('1')}>Run</button>
-        <button onClick={() => sendCommand('1')}>Emergency Stop</button>
-        <button onClick={() => sendCommand('1')}>Reset</button>
-        <FileWriter data={displayedData} />
+      <div className="navbar-top">
+        <img src={logo} className="logo" alt="Logo" />
       </div>
-  
-      <div className="hero-section">
-      <div className="errors-section">
-            <h4>Errors</h4>
-            {/* Display error rectangles */}
-            {errors.map((error, index) => (
-              <div
-                key={index}
-                className={`error-rectangle ${error.status === 'OK' ? 'grey' : 'red'}`}
-                onClick={() => updateError(error.name, 'OK', '')}
-              >
-                {error.name}
-                {error.status !== 'OK' && <div className="error-message">{error.message}</div>}
+      <div className="content">
+        <div className="container">
+          <div className="main-content">
+            {!podConnected && (
+              <div className="disconnected-banner">
+                Pod Disconnected
               </div>
-            ))}
-          </div>
-
-        <div className="pod-status-section">
-          <h4>Pod Status</h4>
-          {/* Pod status indicators */}
-          <div className="pod-status">
-            {/* Display status of brakes, CCU, VCU, and BMS */}
-            <div>Brakes: {podStatus.brakes}</div>
-            <div>CCU: {podStatus.CCU}</div>
-            <div>VCU: {podStatus.VCU}</div>
-            <div>BMS: {podStatus.BMS}</div>
-          </div>
-        </div>
-        <div className="speed-acceleration-section">
-          <h4>Speed & Acceleration</h4>
-          {/* Display speed and acceleration as progress bars */}
-          <div className="progress-bars">
-            <div className="progress-bar">
-              <p>Speed</p>
-              <SemiCircleProgressBar 
-                percentage={podData.speed} 
-                diameter={200} 
-                showPercentValue={false}
-                strokeWidth={20} 
-                background={"#202226"} 
-                className="progressBar" 
-                style={{ right: "100" }} 
-              />
-              <p className="unit">m/s</p>
-            </div>
-            <div className="progress-bar">
-              <p>Acceleration</p>
-              <SemiCircleProgressBar 
-                percentage={podData.acceleration} 
-                diameter={200} 
-                showPercentValue={false}
-                strokeWidth={20} 
-                background={"#202226"} 
-                className="progressBar" 
-                style={{ right: "100" }} 
-              />
-              <p className="unit">m²/s</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-        <div className="sensors-container">
-          <div className="sensor-data-section">
-            {/* Sensor Data for Accelerometer, Gyroscope, and Magnetometer */}
-            <h4>IMU</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Sensor</th>
-                  <th className="numeric-column">X</th>
-                  <th className="numeric-column">Y</th>
-                  <th className="numeric-column">Z</th>
-                  <th>Units</th>
-                </tr>
-              </thead>
-              <tbody>
-              <tr>
-                <td>Accelerometer</td>
-                <td className="numeric-column">{displayedData.accelerometer.x.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.accelerometer.y.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.accelerometer.z.toFixed(2)}</td>
-                <td>m/s²</td>
-              </tr>
-              <tr>
-                <td>Gyroscope</td>
-                <td className="numeric-column">{displayedData.gyroscope.x.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.gyroscope.y.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.gyroscope.z.toFixed(2)}</td>
-                <td>rad/s</td>
-              </tr>
-              {/* Optionally, add Magnetometer data in similar fashion if needed */}
-              <tr>
-                <td>Magnetometer</td>
-                <td className="numeric-column">{displayedData.magnetometer.x.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.magnetometer.y.toFixed(2)}</td>
-                <td className="numeric-column">{displayedData.magnetometer.z.toFixed(2)}</td>
-                <td>µT</td>
-              </tr>
-              </tbody>
-            </table>
-          </div>
-  
-          <div className="sensor-data-section">
-            <h4>Gap Height Sensors</h4>
-            <div className="barsContainer">
-              {displayedData.gapHeightSensors.map((gapHeight, index) => (
-                <div key={`gapHeight-${index}`}>
-                  <div className="labelSide">20mm</div>
-                  <div className="gapHeightBarContainer">
-                    {/* Invert the moving bar's position logic */}
-                    <div
-                      className="movingBar"
-                      style={{ 
-                        top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
-                        transition: 'top 0.3s ease', // Smooth transition for the movement
-                        backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
-                           gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
-                           '#FF0000' // Red for 13-20
-                      }}
-                    ></div>
-                  </div>
-                  <div className="valueIndicator">
-                    {gapHeight.toFixed(2)}mm</div>
+            )}    
+            <div className="hero-section">
+              <div className="col1">
+                <div className="button-section">
+                  {/* Navbar with buttons */}
+                  <button onClick={openSerialPort}>Open Serial Port</button>
+                  <button onClick={() => sendCommand('1')}>Levitation On</button>
+                  <button onClick={() => sendCommand('0')}>Levitation Off</button>
+                  <button onClick={toggleLED}>Toggle LED</button>
+                  <button onClick={toggleLED}>Toggle LED</button>
+                  <button onClick={() => sendCommand('1')}>Run</button>
+                  <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('1')}>Emergency Stop</button>
+                  <FileWriter data={displayedData} sentData={commandToBeSent} />
                 </div>
-              ))}
+
+                <div className="pod-image-container">
+                  <img src={podImage} alt="Pod" className="pod-image" />
+                  <div className="pod-status-grid">
+                    <div className="status-item">
+                      <div className={`status-indicator ${podStatus.BMS.toLowerCase()}`}></div>
+                      <span>BMS: {podStatus.BMS}</span>
+                    </div>
+                    <div className="status-item">
+                      <div className={`status-indicator ${podStatus.CCU.toLowerCase()}`}></div>
+                      <span>CCU: {podStatus.CCU}</span>
+                    </div>
+                    <div className="status-item">
+                      <div className={`status-indicator ${podStatus.VCU.toLowerCase()}`}></div>
+                      <span>VCU: {podStatus.VCU}</span>
+                    </div>
+                    <div className="status-item">
+                      <div className={`status-indicator ${podStatus.brakes.toLowerCase()}`}></div>
+                      <span>Brakes: {podStatus.brakes}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="col2">
+                <div className="speed-acceleration-section">
+                  {/* Display speed and acceleration as progress bars */}
+                  <div className="progress-bars">
+                    <div className="progress-bar">
+                      <h5 style={{margin: 0}}>Speed</h5>
+                      <SemiCircleProgressBar 
+                        percentage={podData.speed} 
+                        diameter={150} 
+                        showPercentValue={false}
+                        strokeWidth={20} 
+                        background={"#7d818a"} 
+                        className="progressBar" 
+                        style={{ right: "100" }} 
+                      />
+                      <p className="unit">m/s</p>
+                    </div>
+                    <div className="progress-bar">
+                      <h5 style={{margin: 0}}>Acceleration</h5>
+                      <SemiCircleProgressBar 
+                        percentage={podData.acceleration} 
+                        diameter={150} 
+                        showPercentValue={false}
+                        strokeWidth={20} 
+                        background={"#7d818a"} 
+                        className="progressBar" 
+                        style={{ right: "100" }} 
+                      />
+                      <p className="unit">m²/s</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="sensor-data-section">
+                  <h4>Temperature</h4>
+                  <table>
+                  <thead>
+                    <tr>
+                      <th className="numeric-column">Low</th>
+                      <th className="numeric-column">High</th>
+                      <th className="numeric-column">Average</th>
+                      <th>Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                        <tr>
+                          <td className="numeric-column">{lowTemp}</td>
+                          <td className="numeric-column">{highTemp}</td>
+                          <td className="numeric-column">{avgTemp}</td>
+                          <td>°C</td>
+                        </tr>
+                  </tbody>
+                </table>
+                </div>
+                <div className="sensor-data-section">
+                  <h4>Braking, Embedded</h4>
+                </div>
+              </div>
+              
+              <div className="col3">
+                <div className="sensor-data-section">
+                  <h4>Gap Height</h4>
+                  <div className="barsContainer">
+                    {displayedData.gapHeightSensors.map((gapHeight, index) => (
+                      <div key={`gapHeight-${index}`}>
+                        <div className="labelSide">20mm</div>
+                        <div className="gapHeightBarContainer">
+                          {/* Invert the moving bar's position logic */}
+                          <div
+                            className="movingBar"
+                            style={{ 
+                              top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
+                              transition: 'top 0.3s ease', // Smooth transition for the movement
+                              backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
+                                gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
+                                '#FF0000' // Red for 13-20
+                            }}
+                          ></div>
+                        </div>
+                        <div className="valueIndicator">
+                          {gapHeight.toFixed(2)}mm</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="sensor-data-section">
+                  <h4>Battery</h4>
+                  <h5>Cell Voltage</h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="numeric-column">Low</th>
+                        <th className="numeric-column">High</th>
+                        <th className="numeric-column">Average</th>
+                        <th>Units</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                          <tr>
+                            <td className="numeric-column">{lowestVoltage}</td>
+                            <td className="numeric-column">{highestVoltage}</td>
+                            <td className="numeric-column">{averageVoltage}</td>
+                            <td>V</td>
+                          </tr>
+                    </tbody>
+                  </table>
+                  <h5>Resistance</h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="numeric-column">Low</th>
+                        <th className="numeric-column">High</th>
+                        <th className="numeric-column">Average</th>
+                        <th>Units</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                          <tr>
+                            <td className="numeric-column">FILLER</td>
+                            <td className="numeric-column">FILLER</td>
+                            <td className="numeric-column">FILLER</td>
+                            <td>Ω</td>
+                          </tr>
+                    </tbody>
+                </table>
+                <h5>Pack </h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="numeric-column">Low</th>
+                        <th className="numeric-column">High</th>
+                        <th className="numeric-column">Average</th>
+                        <th>Units</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                          <tr>
+                            <td className="numeric-column">FILLER</td>
+                            <td className="numeric-column">FILLER</td>
+                            <td className="numeric-column">FILLER</td>
+                            <td>?</td>
+                          </tr>
+                    </tbody>
+                </table>
+                </div>
+              </div>
+
+            </div>
+            <div className="console">
+              <h4>Console</h4>
+              <p>12:35:36 PM: Pre-Run Check: CCU</p>
+              <p>12:35:36 PM: SUCCESS</p>
+              <p>12:35:36 PM: Pre-Run Check: VCU</p>
+              <p>12:35:36 PM: !!!ERROR!!!: VCU</p>
             </div>
           </div>
 
-          {/* <div className="sensor-data-section">
-            <h4>Temperature Sensors</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Sensor</th>
-                  <th>Temperature (°C)</th>
-                </tr>
-              </thead>
-              <tbody>
-                  {displayedData.tempSensors.map((temp, index) => (
-                  <tr key={`temp-${index}`}>
-                    <td>Temp Sensor {index + 1}</td>
-                    <td>{temp}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="side-panel">
+            <div className="tabs">
+              <button onClick={() => handleTabChange('battery')}>Battery Data</button>
+              <button onClick={() => handleTabChange('sensors')}>Sensors</button>
+            </div>
+
+            <div className={`tab-content ${activeTab === 'sensors' ? 'active-tab-content' : ''}`}>
+              <div className="sensor-data-section">
+                <h4>IMU Data</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Pos.</th>
+                      <th>Sensor</th>
+                      <th className="numeric-column">X</th>
+                      <th className="numeric-column">Y</th>
+                      <th className="numeric-column">Z</th>
+                      <th>Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(displayedData.imuData).map(([position, sensors]) => (
+                      <React.Fragment key={position}>
+                        <tr>
+                          <td rowSpan="2">{position}</td>
+                          <td>Accelerometer</td>
+                          <td className="numeric-column">{sensors.accelerometer.x.toFixed(2)}</td>
+                          <td className="numeric-column">{sensors.accelerometer.y.toFixed(2)}</td>
+                          <td className="numeric-column">{sensors.accelerometer.z.toFixed(2)}</td>
+                          <td>m/s²</td>
+                        </tr>
+                        <tr>
+                          <td>Gyroscope</td>
+                          <td className="numeric-column">{sensors.gyroscope.x.toFixed(2)}</td>
+                          <td className="numeric-column">{sensors.gyroscope.y.toFixed(2)}</td>
+                          <td className="numeric-column">{sensors.gyroscope.z.toFixed(2)}</td>
+                          <td>rad/s</td>
+                        </tr>
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+      
+              <div className="sensor-data-section">
+                <h4>Gap Height</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Position</th>
+                      <th>1 (mm)</th>
+                      <th>2 (mm)</th>
+                      <th>3 (mm)</th>
+                      <th>4 (mm)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Vertical Sensors */}
+                    <tr>
+                      <td>Vertical</td>
+                      {displayedData.gapHeightSensors.slice(0, 4).map((gapHeight, index) => (
+                        <td key={`vertical-${index}`}>{gapHeight.toFixed(2)}</td>
+                      ))}
+                    </tr>
+                    {/* Lateral Sensors */}
+                    <tr>
+                      <td>Lateral</td>
+                      {displayedData.gapHeightSensors.slice(4, 8).map((gapHeight, index) => (
+                        <td key={`lateral-${index}`}>{gapHeight.toFixed(2)}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="sensor-data-section">
+                <h4>Temperature</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sensor 1 (°C)</th>
+                      <th>Sensor 2 (°C)</th>
+                      <th>Sensor 3 (°C)</th>
+                      <th>Sensor 4 (°C)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...Array(Math.ceil(displayedData.tempSensors.length / 4))].map((_, rowIndex) => (
+                      <tr key={`temp-row-${rowIndex}`}>
+                        {displayedData.tempSensors.slice(rowIndex * 4, (rowIndex + 1) * 4).map((temp, index) => (
+                          <td key={`temp-${rowIndex}-${index}`}>{temp}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="sensor-data-section">
+                <h4>Hall Effect</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sensor 1 (Oersted)</th>
+                      <th>Sensor 2 (Oersted)</th>
+                      <th>Sensor 3 (Oersted)</th>
+                      <th>Sensor 4 (Oersted)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...Array(Math.ceil(displayedData.hallEffectSensors.length / 4))].map((_, rowIndex) => (
+                      <tr key={`hallEffect-row-${rowIndex}`}>
+                        {displayedData.hallEffectSensors.slice(rowIndex * 4, (rowIndex + 1) * 4).map((hallEffect, index) => (
+                          <td key={`hallEffect-${rowIndex}-${index}`}>{hallEffect}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className={`tab-content ${activeTab === 'battery' ? 'active-tab-content' : ''}`}>
+            <div className="sensor-data-section">
+                <h4>Battery Voltages</h4>
+                <table>
+                  <tbody>
+                    {Array.from({ length: 18 }, (_, rowIndex) => rowIndex * 8).map(rowStartIndex => (
+                      <tr key={`row-${rowStartIndex / 8}`}>
+                        {Array.from({ length: 8 }, (_, colIndex) => rowStartIndex + colIndex).map(cellIndex => (
+                          <td key={`cell-${cellIndex}`}>
+                            {/* Ensuring that a default value of 0 is displayed */}
+                            {displayedData.batteryVoltages[cellIndex]?.toFixed(2) || '0.00'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-  
-          <div className="sensor-data-section">
-            <h4>Distance Sensors</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Sensor</th>
-                  <th>Distance (cm)</th>
-                </tr>
-              </thead>
-              <tbody>
-                  {displayedData.distanceSensors.map((distance, index) => (
-                  <tr key={`distance-${index}`}>
-                    <td>Distance Sensor {index + 1}</td>
-                    <td>{distance}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div> */}
         </div>
       </div>
     </div>
-);}
-  
-  export default App;
+  );
+}
+export default App;
