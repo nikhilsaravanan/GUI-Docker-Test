@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import SemiCircleProgressBar from "react-progressbar-semicircle";
 import FileWriter from './components/FileWriter';
 import logo from './components/white_guad.png'; // Make sure the path is correct
@@ -55,6 +55,22 @@ function App() {
   const [bufferedData, setBufferedData] = useState([]);
   const [podConnected, setPodConnected] = useState(false);
   const [commandToBeSent, setCommand] = useState("");
+  const [fileWriterData, setFileWriterData] = useState("");
+  const [consoleMessages, setConsoleMessages] = useState([]); // State to store console messages
+  const consoleRef = useRef(null);
+  const [spacePressCount, setSpacePressCount] = useState(0);
+  const spaceTimeoutRef = useRef(null);
+
+  const addToConsole = (msg) => {
+    setConsoleMessages(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
+  };
+
+  useEffect(() => {
+    if (consoleRef.current) {
+        consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    }
+}, [consoleMessages]);
+
   const [podStatus, setPodStatus] = useState({
     brakes: 'OK',
     CCU: 'OK',
@@ -180,7 +196,6 @@ function App() {
       }
     });
   };
-  
 
   const openSerialPort = async () => {
     if (port) {
@@ -196,10 +211,12 @@ function App() {
       readSerialData(); // Start reading after opening the port
       // Optionally set podConnected to true here if you want immediate feedback
       // setPodConnected(true);
+      addToConsole("Attempted to open serial port.");
     } catch (error) {
       console.error("Failed to open serial port:", error);
       // Consider setting podConnected to false here to indicate failure to connect
       setPodConnected(false);
+      addToConsole("Failed to open serial port.");
     }
   };
   
@@ -242,6 +259,7 @@ function App() {
         while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
           const line = buffer.substring(0, newlineIndex + 1); // Include the newline character
           processSerialData(line); // Process each complete line
+          setFileWriterData(line);
           buffer = buffer.substring(newlineIndex + 1); // Keep remaining data in the buffer
         }
       }
@@ -273,22 +291,23 @@ function App() {
 
   const sendCommand = useCallback(async (command) => {
     if (!port || !port.writable) {
-      console.log("Port is not open or writable");
-      return;
+        addToConsole(`Port is not open or writable. Command: '${command}' not sent`);
+        return;
     }
   
     try {
-      console.log(`Sending command: ${command}`);
-      const writer = port.writable.getWriter();
-      setCommand("A COMMAND WAS SENT TO THE POD: " + command);
-      const data = new TextEncoder().encode(`${command}\n`);
-      await writer.write(data);
-      writer.releaseLock();
-      // await writeDataToFile(data);
+        console.log(`Sending command: ${command}`);
+        const writer = port.writable.getWriter();
+        setCommand("A COMMAND WAS SENT TO THE POD: " + command);
+        const data = new TextEncoder().encode(`${command}\n`);
+        await writer.write(data);
+        writer.releaseLock();
+        addToConsole(`Command '${command}' sent successfully.`);
     } catch (error) {
-      console.error("Error sending command:", error);
+        console.error("Error sending command:", error);
+        addToConsole(`Failed to send command: ${command}`);
     }
-  }, [port]); // Dependency array includes `port` since the function uses it
+}, [port]);
 
   // Effect to process buffered data at regular intervals
   useEffect(() => {
@@ -316,6 +335,45 @@ function App() {
       }
     };
   }, [port]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+        if (event.key === " ") {
+            event.preventDefault(); // Prevent default behavior if needed
+            setSpacePressCount(prevCount => {
+                if (prevCount === 2) {
+                    sendCommand('Emergency Stop'); // Replace this with the actual command
+                    return 0; // Reset counter after sending command
+                }
+                return prevCount + 1;
+            });
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        if (spaceTimeoutRef.current) {
+            clearTimeout(spaceTimeoutRef.current);
+        }
+    };
+}, [sendCommand]);
+
+useEffect(() => {
+  if (spacePressCount > 0) {
+      spaceTimeoutRef.current = setTimeout(() => {
+          setSpacePressCount(0); // Reset count after 1 second of inactivity
+      }, 1000); // Adjust timeout as necessary
+
+      return () => {
+          if (spaceTimeoutRef.current) {
+              clearTimeout(spaceTimeoutRef.current);
+          }
+      };
+  }
+}, [spacePressCount]);
+
 
   function formatNumberWithSign(number) {
     // Ensure the number has exactly two decimal places
@@ -348,7 +406,7 @@ function App() {
                   <button onClick={toggleLED}>Toggle LED</button>
                   <button onClick={() => sendCommand('1')}>Run</button>
                   <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('1')}>Emergency Stop</button>
-                  <FileWriter data={displayedData} sentData={commandToBeSent} />
+                  <FileWriter data={fileWriterData} sentData={commandToBeSent} />
                 </div>
 
                 <div className="pod-image-container">
@@ -433,29 +491,56 @@ function App() {
               </div>
               
               <div className="col3">
+                <div className="allbarsdiv">
                 <div className="sensor-data-section">
-                  <h4>Gap Height</h4>
-                  <div className="barsContainer">
-                    {displayedData.gapHeightSensors.map((gapHeight, index) => (
-                      <div key={`gapHeight-${index}`}>
-                        <div className="labelSide">20mm</div>
-                        <div className="gapHeightBarContainer">
-                          {/* Invert the moving bar's position logic */}
-                          <div
-                            className="movingBar"
-                            style={{ 
-                              top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
-                              transition: 'top 0.3s ease', // Smooth transition for the movement
-                              backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
-                                gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
-                                '#FF0000' // Red for 13-20
-                            }}
-                          ></div>
+                    <h4>Vertical (mm)</h4>
+                    <div className="barsContainer">
+                    {displayedData.gapHeightSensors.slice(0, 4).map((gapHeight, index) => (
+                        <div key={`gapHeight-${index}`}>
+                          <div className="labelSide">20mm</div>
+                          <div className="gapHeightBarContainer">
+                            {/* Invert the moving bar's position logic */}
+                            <div
+                              className="movingBar"
+                              style={{ 
+                                top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
+                                transition: 'top 0.3s ease', // Smooth transition for the movement
+                                backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
+                                  gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
+                                  '#FF0000' // Red for 13-20
+                              }}
+                            ></div>
+                          </div>
+                          <div className="valueIndicator">
+                            {gapHeight.toFixed(2)}</div>
                         </div>
-                        <div className="valueIndicator">
-                          {gapHeight.toFixed(2)}mm</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+                  <div className="sensor-data-section">
+                    <h4>Lateral (mm)</h4>
+                    <div className="barsContainer">
+                    {displayedData.gapHeightSensors.slice(4, 8).map((gapHeight, index) => (
+                        <div key={`gapHeight-${index}`}>
+                          <div className="labelSide">20mm</div>
+                          <div className="gapHeightBarContainer">
+                            {/* Invert the moving bar's position logic */}
+                            <div
+                              className="movingBar"
+                              style={{ 
+                                top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
+                                transition: 'top 0.3s ease', // Smooth transition for the movement
+                                backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
+                                  gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
+                                  '#FF0000' // Red for 13-20
+                              }}
+                            ></div>
+                          </div>
+                          <div className="valueIndicator">
+                            {gapHeight.toFixed(2)}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div className="sensor-data-section">
@@ -520,13 +605,13 @@ function App() {
                 </div>
               </div>
 
-            </div>
-            <div className="console">
+          </div>
+            <div className="console" ref={consoleRef}>
               <h4>Console</h4>
-              <p>12:35:36 PM: Pre-Run Check: CCU</p>
-              <p>12:35:36 PM: SUCCESS</p>
-              <p>12:35:36 PM: Pre-Run Check: VCU</p>
-              <p>12:35:36 PM: !!!ERROR!!!: VCU</p>
+              <h4>*PRESS SPACE BAR 3 TIMES TO EMERGENCY STOP*</h4>
+              {consoleMessages.map((msg, index) => (
+                <p key={index}>{msg}</p>
+              ))}
             </div>
           </div>
 
@@ -581,10 +666,10 @@ function App() {
                   <thead>
                     <tr>
                       <th>Position</th>
-                      <th>1 (mm)</th>
-                      <th>2 (mm)</th>
-                      <th>3 (mm)</th>
-                      <th>4 (mm)</th>
+                      <th>Front left</th>
+                      <th>Front right</th>
+                      <th>Back left</th>
+                      <th>Back right</th>
                     </tr>
                   </thead>
                   <tbody>

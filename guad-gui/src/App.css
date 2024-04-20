@@ -54,11 +54,13 @@ html {
   padding: 5px;
   margin-bottom: 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-  /* More pronounced shadow */
 }
 
 .console {
   margin-top: auto;
+  height: 240px;
+  overflow-y: auto;
+  font-family: monospace;
 }
 
 .main-content {
@@ -154,6 +156,7 @@ button:hover {
 .console h4,
 p {
   font-size: 15px;
+  margin: 7px;
 }
 
 /* Tab and Tab Content Styling */
@@ -233,6 +236,12 @@ tr:nth-child(even) {
   align-items: stretch;
 }
 
+.allbarsdiv {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+}
+
 .gapHeightBarContainer {
   display: flex;
   flex-direction: column;
@@ -242,7 +251,7 @@ tr:nth-child(even) {
   width: 25px;
   border: 2px solid #004aad;
   position: relative;
-  margin: 0 10px;
+  margin: 0 8px;
   /* Increase margin to make room for labels */
   background-color: #f0f0f0;
 }
@@ -260,6 +269,7 @@ tr:nth-child(even) {
 }
 
 .valueIndicator {
+  text-align: center;
   margin-top: 10px;
   font-size: 12px;
 }
