@@ -52,15 +52,16 @@ html {
   /* Container backgrounds */
   border-radius: 8px;
   padding: 5px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .console {
   margin-top: auto;
-  height: 240px;
+  height: 130px;
   overflow-y: auto;
   font-family: monospace;
+  width: 97%;
 }
 
 .main-content {
@@ -324,22 +325,31 @@ tr:nth-child(even) {
   /* Ensure the container takes full width */
 }
 
-.col1,
-.col2 {
-  flex: 1;
-  /* This makes both columns take up equal space */
-  /* If you want col1 to be wider or narrower, adjust the flex-basis or add specific width */
+.half1 {
+  display: flex;
+  flex-wrap: wrap;
 }
 
-/* Remove any unnecessary margin or padding that might cause gaps */
-.col1,
-.col2 {
-  margin-right: 10px;
+.col1 {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   /* Add margin to the right of col1 if needed, remove if not */
   padding: 0;
-  /* Adjust based on your layout needs */
+  align-items: center;
+  justify-content: flex-start;
 }
 
+.col2 {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  /* Add margin to the right of col1 if needed, remove if not */
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+}
 
 .errors-section {
   flex: 1;
@@ -349,16 +359,11 @@ tr:nth-child(even) {
 }
 
 .pod-image-container {
-  position: relative;
-  width: 60%;
-  /* Adjust as needed */
-  padding: 40px;
-  /* Keeps the image from touching the edges */
   display: flex;
   justify-content: center;
-  /* Centers the content horizontally */
   align-items: center;
-  /* Centers the content vertically */
+  width: 60%;
+  margin: 10px 0;
 }
 
 .pod-status-grid {
