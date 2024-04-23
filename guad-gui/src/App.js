@@ -6,7 +6,7 @@ import podImage from './components/pod_top.png';
 import './App.css';
 
 const initialState = {
-  tempSensors: Array(12).fill(0),
+  tempSensors: Array(12).fill(0),  // This could be adjusted or used differently depending on your exact needs
   hallEffectSensors: Array(8).fill(0),
   imuData: {
     rear: {
@@ -22,25 +22,57 @@ const initialState = {
       gyroscope: { x: 0, y: 0, z: 0 }
     }
   },
+  podState: 'INITIALIZATION',
+  podHealth: true,
   gapHeightSensors: Array(8).fill(0.00),
   batteryVoltages: Array(144).fill(0.00),
+  limTemps: {
+    frontRight: 0, frontLeft: 0, backRight: 0, backLeft: 0
+  },
+  yokeTemps: {
+    verticalFrontRight: 0, verticalFrontLeft: 0, verticalBackRight: 0, verticalBackLeft: 0,
+    lateralFrontRight: 0, lateralFrontLeft: 0, lateralBackRight: 0, lateralBackLeft: 0
+  }
 };
 
 const sensorReducer = (state, action) => {
   switch (action.type) {
-    case 'UPDATE_TEMP_SENSORS':
-      return { ...state, tempSensors: action.payload };
-    case 'UPDATE_HALL_EFFECT_SENSORS':
-      return { ...state, hallEffectSensorsSensors: action.payload };
-    case 'UPDATE_GAP_HEIGHT_SENSORS':
-      return { ...state, gapHeightSensors: action.payload };
+    case 'UPDATE_POD_STATE':
+      return { ...state, podState: action.payload };
+    case 'UPDATE_POD_HEALTH':
+      return { ...state, podHealth: action.payload };
       case 'UPDATE_IMU_DATA':
-      const { position, data } = action.payload;
+        const { position, sensorType, data } = action.payload;
+        if (!state.imuData[position]) {
+          console.warn(`No position found in IMU data for position: ${position}`);
+          return state;
+        }
+        return {
+          ...state,
+          imuData: {
+            ...state.imuData,
+            [position]: {
+              ...state.imuData[position],
+              [sensorType]: {
+                ...state.imuData[position][sensorType],
+                ...data
+              },
+            },
+          },
+        };
+      
+    case 'UPDATE_HALL_EFFECT_SENSORS':
+      return { ...state, hallEffectSensors: action.payload };
+    case 'UPDATE_TEMPERATURES':
       return {
         ...state,
-        imuData: {
-          ...state.imuData,
-          [position]: data
+        limTemps: {
+          ...state.limTemps,
+          ...action.payload.limTemps
+        },
+        yokeTemps: {
+          ...state.yokeTemps,
+          ...action.payload.yokeTemps
         }
       };
     default:
@@ -87,11 +119,22 @@ function App() {
     { name: 'VCU Error', status: 'OK', message: 'No VCU error' }
   ]);
   const dataProcessingInterval = 1000; // Interval for processing buffered data
-  const [activeTab, setActiveTab] = useState('battery'); // Default active tab
+  const [activeTab, setActiveTab] = useState('sensors'); // Default active tab
   // Calculate low, high, and average temperatures
-  const lowTemperature = Math.min(...displayedData.tempSensors);
-  const highTemperature = Math.max(...displayedData.tempSensors);
-  const averageTemperature = displayedData.tempSensors.reduce((acc, curr) => acc + curr, 0) / displayedData.tempSensors.length;
+  const flattenTemps = (temps) => {
+    // Extract all temperature values into a single array
+    return Object.values(temps).flat();
+  };
+  
+  const allTemps = [
+    ...flattenTemps(displayedData.limTemps),
+    ...flattenTemps(displayedData.yokeTemps)
+  ];
+  
+  const lowTemperature = Math.min(...allTemps);
+  const highTemperature = Math.max(...allTemps);
+  const averageTemperature = allTemps.reduce((acc, curr) => acc + curr, 0) / allTemps.length;
+  
 
   // Ensure values are finite or set a default/fallback value
   const lowTemp = isFinite(lowTemperature) ? lowTemperature.toFixed(2) : 'N/A';
@@ -113,63 +156,37 @@ function App() {
   // Function to change the active tab
   const handleTabChange = (tabName) => {
     setActiveTab(tabName);
-  };
-
-  const updateError = (name, status, message) => {
-    setErrors(prevErrors => {
-      return prevErrors.map(error => {
-        if (error.name === name) {
-          return { ...error, status, message };
-        }
-        return error;
-      });
-    });
-  };
-
-  // Modular approach for processing different sensor data packets
-  const processTempSensorsData = (values) => {
-    dispatch({ type: 'UPDATE_TEMP_SENSORS', payload: values });
-  };
-
-  const processHallEffectData = (values) => {
-    dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values });
-  };
-
-  const processIMUData = (position, values) => {
-    if (position === 'Rear') {
-      dispatch({ type: 'UPDATE_REAR_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
-    } else if (position === 'Center') {
-      dispatch({ type: 'UPDATE_CENTER_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
-    } else if (position === 'Front') {
-      dispatch({ type: 'UPDATE_FRONT_IMU', payload: { accel: { x: values[0], y: values[1], z: values[2] }, angular: { x: values[3], y: values[4], z: values[5] } } });
-    }
-  };
-
-  const processGapHeightData = (values) => {
-    dispatch({ type: 'UPDATE_GAP_HEIGHT_SENSORS', payload: values });
-  };
-
-  const processBatteryData = (values) => {
-    dispatch({ type: 'UPDATE_BATTERY_VOLTAGES', payload: values });
   };  
 
-  // Map packet identifiers to their processing functions
   const packetHandlers = {
-    "Temp Sensors": processTempSensorsData,
-    "Hall Effect": processHallEffectData,
-    "Rear IMU Data": (values) => {
-      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    1: (values) => { // IMU Angular velocities for Rear, Center, Front and Lateral Hall Effect Sensors
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', sensorType: 'gyroscope', data: { x: values[0], y: values[1], z: values[2] } } });
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', sensorType: 'gyroscope', data: { x: values[3], y: values[4], z: values[5] } } });
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', sensorType: 'gyroscope', data: { x: values[6], y: values[7], z: values[8] } } });
+      dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values.slice(9, 13) }); // Assuming these are the Lateral Hall Effect Sensors
     },
-    "Center IMU Data": (values) => {
-      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    2: (values) => { // IMU Accelerations for Rear, Center, Front and Vertical Hall Effect Sensors
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', sensorType: 'accelerometer', data: { x: values[0], y: values[1], z: values[2] } } });
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', sensorType: 'accelerometer', data: { x: values[3], y: values[4], z: values[5] } } });
+      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', sensorType: 'accelerometer', data: { x: values[6], y: values[7], z: values[8] } } });
+      dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values.slice(9, 13) }); // Assuming these are the Vertical Hall Effect Sensors
     },
-    "Front IMU Data": (values) => {
-      dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', data: { accelerometer: { x: values[0], y: values[1], z: values[2] }, gyroscope: { x: values[3], y: values[4], z: values[5] } } } });
+    3: (values) => { // Lateral and Vertical Gap Sensors
+      dispatch({ type: 'UPDATE_GAP_HEIGHT_SENSORS', payload: {
+        lateral: { frontRight: values[0], frontLeft: values[1], backRight: values[2], backLeft: values[3] },
+        vertical: { frontRight: values[4], frontLeft: values[5], backRight: values[6], backLeft: values[7] }
+      }});
     },
-    "Gap Height": processGapHeightData,
-    "Battery Data": processBatteryData,
-    // Future packet types and their handler functions will be added here
-  };
+    4: (values) => { // Temperatures for various components
+      dispatch({ type: 'UPDATE_TEMPERATURES', payload: {
+        limTemps: { frontRight: values[0], frontLeft: values[1], backRight: values[2], backLeft: values[3] },
+        yokeTemps: {
+          verticalFrontRight: values[4], verticalFrontLeft: values[5], verticalBackRight: values[6], verticalBackLeft: values[7],
+          lateralFrontRight: values[8], lateralFrontLeft: values[9], lateralBackRight: values[10], lateralBackLeft: values[11]
+        }
+      }});
+    }
+  };  
 
     // Utility function to extract sensor values from a data string
   const extractSensorValues = (dataString) => {
@@ -180,22 +197,40 @@ function App() {
   };
 
   const processSerialData = (dataString) => {
-    console.log("Processing data string:", dataString);
-  
-    if (dataString.trim() === "lost") {
-      setPodConnected(false);
-    } else {
-      setPodConnected(true);
+    if (!dataString) {
+      console.error("Attempted to process empty or undefined data.");
+      return;
     }
   
-    // Dynamically identify and process different sensor packets
-    Object.keys(packetHandlers).forEach((key) => {
-      if (dataString.startsWith(key)) {
-        const values = extractSensorValues(dataString);
-        packetHandlers[key](values); // Call the handler function based on packet type
+    // Log the data being processed for debugging
+    console.log("Processing data:", dataString);
+  
+    let packetInfo, data;
+    try {
+      [packetInfo, data] = dataString.split(':');
+      if (!packetInfo || !data) {
+        console.error("Data string is not in the expected format:", dataString);
+        return;
       }
-    });
+    } catch (error) {
+      console.error("Error splitting data string:", dataString, error);
+      return;
+    }
+  
+    let packetType = parseInt(packetInfo.trim(), 10);
+    let values = data.split(',').map(Number);
+    
+    let stateCode = values[1];
+    let healthStatus = values[2] === 1;
+    
+    dispatch({ type: 'UPDATE_POD_STATE', payload: stateCode });
+    dispatch({ type: 'UPDATE_POD_HEALTH', payload: healthStatus });
+  
+    if (packetHandlers.hasOwnProperty(packetType)) {
+      packetHandlers[packetType](values.slice(3)); // Pass only the data values
+    }
   };
+  
 
   const openSerialPort = async () => {
     if (port) {
@@ -221,30 +256,29 @@ function App() {
   };
   
 
-  // Function to read data from the serial port
   const readSerialData = async () => {
     if (!port) {
       console.log("Serial port is not set");
       return;
     }
-    
+  
     if (reader) {
       console.log("Reader is already in use");
       return;
     }
   
     const newReader = port.readable.getReader();
-    // Use a Svelte store or React's useState hook to update the reader state
     setReader(newReader);
   
-    const textDecoder = new TextDecoder();
+    const textDecoder = new TextDecoder("utf-8", { stream: true });
     let buffer = "";
+    const BUFFER_LIMIT = 1024; // Set according to your testing
   
     try {
       while (true) {
         const { value, done } = await newReader.read();
         if (done) {
-          // Don't forget to process any remaining buffer content before breaking
+          // Ensure remaining buffer is processed before closing
           if (buffer.length > 0) {
             processSerialData(buffer);
           }
@@ -252,15 +286,22 @@ function App() {
           setReader(null);
           break;
         }
-        const text = textDecoder.decode(value, {stream: true}); // Use stream option for partial decoding
+  
+        const text = textDecoder.decode(value, { stream: true });
         buffer += text;
+  
+        if (buffer.length > BUFFER_LIMIT) {
+          console.warn("Buffer limit reached, data might be lost.");
+          // Optionally process what you can before clearing
+          processSerialData(buffer);
+          buffer = ""; // Clear buffer after processing to handle new data
+        }
   
         let newlineIndex;
         while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          const line = buffer.substring(0, newlineIndex + 1); // Include the newline character
-          processSerialData(line); // Process each complete line
-          setFileWriterData(line);
-          buffer = buffer.substring(newlineIndex + 1); // Keep remaining data in the buffer
+          const line = buffer.substring(0, newlineIndex + 1);
+          processSerialData(line.trim());
+          buffer = buffer.substring(newlineIndex + 1);
         }
       }
     } catch (error) {
@@ -396,100 +437,88 @@ useEffect(() => {
               </div>
             )}    
             <div className="hero-section">
-              <div className="col1">
-                <div className="button-section">
-                  {/* Navbar with buttons */}
-                  <button onClick={openSerialPort}>Open Serial Port</button>
-                  <button onClick={() => sendCommand('1')}>Levitation On</button>
-                  <button onClick={() => sendCommand('0')}>Levitation Off</button>
-                  <button onClick={toggleLED}>Toggle LED</button>
-                  <button onClick={toggleLED}>Toggle LED</button>
-                  <button onClick={() => sendCommand('1')}>Run</button>
-                  <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('1')}>Emergency Stop</button>
-                  <FileWriter data={fileWriterData} sentData={commandToBeSent} />
-                </div>
+              <div className="half1">
+                <div className="col1">
+                  <div className="button-section">
+                    {/* Navbar with buttons */}
+                    <button onClick={openSerialPort}>Open Serial Port</button>
+                    <button onClick={() => sendCommand('1')}>Levitation On</button>
+                    <button onClick={() => sendCommand('0')}>Levitation Off</button>
+                    <button onClick={toggleLED}>Toggle LED</button>
+                    <button onClick={toggleLED}>Toggle LED</button>
+                    <button onClick={() => sendCommand('1')}>Run</button>
+                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('1')}>Emergency Stop</button>
+                    <FileWriter data={fileWriterData} sentData={commandToBeSent} />
+                  </div>
 
-                <div className="pod-image-container">
-                  <img src={podImage} alt="Pod" className="pod-image" />
-                  <div className="pod-status-grid">
-                    <div className="status-item">
-                      <div className={`status-indicator ${podStatus.BMS.toLowerCase()}`}></div>
-                      <span>BMS: {podStatus.BMS}</span>
-                    </div>
-                    <div className="status-item">
-                      <div className={`status-indicator ${podStatus.CCU.toLowerCase()}`}></div>
-                      <span>CCU: {podStatus.CCU}</span>
-                    </div>
-                    <div className="status-item">
-                      <div className={`status-indicator ${podStatus.VCU.toLowerCase()}`}></div>
-                      <span>VCU: {podStatus.VCU}</span>
-                    </div>
-                    <div className="status-item">
-                      <div className={`status-indicator ${podStatus.brakes.toLowerCase()}`}></div>
-                      <span>Brakes: {podStatus.brakes}</span>
+                  <div className="pod-image-container">
+                    <div className="pod-status-grid">
+                      <div className="status-item">
+                        <div className={`status-indicator ${podStatus.BMS.toLowerCase()}`}></div>
+                        <span>BMS: {podStatus.BMS}</span>
+                      </div>
+                      <div className="status-item">
+                        <div className={`status-indicator ${podStatus.CCU.toLowerCase()}`}></div>
+                        <span>CCU: {podStatus.CCU}</span>
+                      </div>
+                      <div className="status-item">
+                        <div className={`status-indicator ${podStatus.VCU.toLowerCase()}`}></div>
+                        <span>VCU: {podStatus.VCU}</span>
+                      </div>
+                      <div className="status-item">
+                        <div className={`status-indicator ${podStatus.brakes.toLowerCase()}`}></div>
+                        <span>Brakes: {podStatus.brakes}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="col2">
-                <div className="speed-acceleration-section">
-                  {/* Display speed and acceleration as progress bars */}
-                  <div className="progress-bars">
-                    <div className="progress-bar">
-                      <h5 style={{margin: 0}}>Speed</h5>
-                      <SemiCircleProgressBar 
-                        percentage={podData.speed} 
-                        diameter={150} 
-                        showPercentValue={false}
-                        strokeWidth={20} 
-                        background={"#7d818a"} 
-                        className="progressBar" 
-                        style={{ right: "100" }} 
-                      />
-                      <p className="unit">m/s</p>
-                    </div>
-                    <div className="progress-bar">
-                      <h5 style={{margin: 0}}>Acceleration</h5>
-                      <SemiCircleProgressBar 
-                        percentage={podData.acceleration} 
-                        diameter={150} 
-                        showPercentValue={false}
-                        strokeWidth={20} 
-                        background={"#7d818a"} 
-                        className="progressBar" 
-                        style={{ right: "100" }} 
-                      />
-                      <p className="unit">m²/s</p>
+                <div className="col2">
+                  <div className="speed-acceleration-section">
+                    <div className="progress-bars">
+                      <div className="progress-bar">
+                        <h5 style={{margin: 0}}>Speed</h5>
+                        <SemiCircleProgressBar 
+                          percentage={podData.speed} 
+                          diameter={150} 
+                          showPercentValue={false}
+                          strokeWidth={20} 
+                          background={"#7d818a"} 
+                          className="progressBar" 
+                          style={{ right: "100" }} 
+                        />
+                        <p className="unit">m/s</p>
+                      </div>
+                      <div className="progress-bar">
+                        <h5 style={{margin: 0}}>Acceleration</h5>
+                        <SemiCircleProgressBar 
+                          percentage={podData.acceleration} 
+                          diameter={150} 
+                          showPercentValue={false}
+                          strokeWidth={20} 
+                          background={"#7d818a"} 
+                          className="progressBar" 
+                          style={{ right: "100" }} 
+                        />
+                        <p className="unit">m²/s</p>
+                      </div>
                     </div>
                   </div>
+                  <div className="pod-image-container">
+                    <img src={podImage} alt="Pod" className="pod-image" />
+                  </div>
                 </div>
-                <div className="sensor-data-section">
-                  <h4>Temperature</h4>
-                  <table>
-                  <thead>
-                    <tr>
-                      <th className="numeric-column">Low</th>
-                      <th className="numeric-column">High</th>
-                      <th className="numeric-column">Average</th>
-                      <th>Units</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                        <tr>
-                          <td className="numeric-column">{lowTemp}</td>
-                          <td className="numeric-column">{highTemp}</td>
-                          <td className="numeric-column">{avgTemp}</td>
-                          <td>°C</td>
-                        </tr>
-                  </tbody>
-                </table>
-                </div>
-                <div className="sensor-data-section">
-                  <h4>Braking, Embedded</h4>
+                
+                <div className="console" ref={consoleRef}>
+                  <h4>Console</h4>
+                  <h4>*PRESS SPACE BAR 3 TIMES TO EMERGENCY STOP*</h4>
+                  <h4>Use ctrl + '+' or ctrl + '-' to resize GUI</h4>
+                  {consoleMessages.map((msg, index) => (
+                    <p key={index}>{msg}</p>
+                  ))}
                 </div>
               </div>
-              
+
               <div className="col3">
                 <div className="allbarsdiv">
                 <div className="sensor-data-section">
@@ -603,22 +632,56 @@ useEffect(() => {
                     </tbody>
                 </table>
                 </div>
+                <div className="sensor-data-section">
+                  <h4>Temperature</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="numeric-column">Low</th>
+                        <th className="numeric-column">High</th>
+                        <th className="numeric-column">Average</th>
+                        <th>Units</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                          <tr>
+                            <td className="numeric-column">{lowTemp}</td>
+                            <td className="numeric-column">{highTemp}</td>
+                            <td className="numeric-column">{avgTemp}</td>
+                            <td>°C</td>
+                          </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="sensor-data-section">
+                  <h4>Braking, Embedded</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th className="numeric-column">Low</th>
+                        <th className="numeric-column">High</th>
+                        <th className="numeric-column">Average</th>
+                        <th>Units</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                          <tr>
+                            <td className="numeric-column">{lowTemp}</td>
+                            <td className="numeric-column">{highTemp}</td>
+                            <td className="numeric-column">{avgTemp}</td>
+                            <td>°C</td>
+                          </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-
-          </div>
-            <div className="console" ref={consoleRef}>
-              <h4>Console</h4>
-              <h4>*PRESS SPACE BAR 3 TIMES TO EMERGENCY STOP*</h4>
-              {consoleMessages.map((msg, index) => (
-                <p key={index}>{msg}</p>
-              ))}
             </div>
           </div>
 
           <div className="side-panel">
             <div className="tabs">
-              <button onClick={() => handleTabChange('battery')}>Battery Data</button>
               <button onClick={() => handleTabChange('sensors')}>Sensors</button>
+              <button onClick={() => handleTabChange('battery')}>Battery Data</button>
             </div>
 
             <div className={`tab-content ${activeTab === 'sensors' ? 'active-tab-content' : ''}`}>
@@ -692,37 +755,69 @@ useEffect(() => {
               </div>
 
               <div className="sensor-data-section">
-                <h4>Temperature</h4>
+                <h4>Yoke Temperatures (°C)</h4>
                 <table>
                   <thead>
                     <tr>
-                      <th>Sensor 1 (°C)</th>
-                      <th>Sensor 2 (°C)</th>
-                      <th>Sensor 3 (°C)</th>
-                      <th>Sensor 4 (°C)</th>
+                      <th></th>
+                      <th>Front Right</th>
+                      <th>Front Left</th>
+                      <th>Back Right</th>
+                      <th>Back Left</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...Array(Math.ceil(displayedData.tempSensors.length / 4))].map((_, rowIndex) => (
-                      <tr key={`temp-row-${rowIndex}`}>
-                        {displayedData.tempSensors.slice(rowIndex * 4, (rowIndex + 1) * 4).map((temp, index) => (
-                          <td key={`temp-${rowIndex}-${index}`}>{temp}</td>
-                        ))}
-                      </tr>
-                    ))}
+                    <tr>
+                      <td>Vertical</td>
+                      <td>{displayedData.yokeTemps.verticalFrontRight.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.verticalFrontLeft.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.verticalBackRight.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.verticalBackLeft.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td>Lateral</td>
+                      <td>{displayedData.yokeTemps.lateralFrontRight.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.lateralFrontLeft.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.lateralBackRight.toFixed(2)}</td>
+                      <td>{displayedData.yokeTemps.lateralBackLeft.toFixed(2)}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
 
               <div className="sensor-data-section">
-                <h4>Hall Effect</h4>
+                <h4>Lim Temperatures (°C)</h4>
                 <table>
                   <thead>
                     <tr>
-                      <th>Sensor 1 (Oersted)</th>
-                      <th>Sensor 2 (Oersted)</th>
-                      <th>Sensor 3 (Oersted)</th>
-                      <th>Sensor 4 (Oersted)</th>
+                      <th></th>
+                      <th>Front Right</th>
+                      <th>Front Left</th>
+                      <th>Back Right</th>
+                      <th>Back Left</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Temperature</td>
+                      <td>{displayedData.limTemps.frontRight.toFixed(2)}</td>
+                      <td>{displayedData.limTemps.frontLeft.toFixed(2)}</td>
+                      <td>{displayedData.limTemps.backRight.toFixed(2)}</td>
+                      <td>{displayedData.limTemps.backLeft.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="sensor-data-section">
+                <h4>Hall Effect (Oersted)</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sensor 1</th>
+                      <th>Sensor 2</th>
+                      <th>Sensor 3</th>
+                      <th>Sensor 4</th>
                     </tr>
                   </thead>
                   <tbody>
