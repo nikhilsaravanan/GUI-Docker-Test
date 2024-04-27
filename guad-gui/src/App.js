@@ -6,18 +6,29 @@ import podImage from './components/pod_top.png';
 import './App.css';
 
 const stateDescriptions = [
-  { name: "Initialization", commands: [{ text: "Run Health Check", command: "2" }] },
+  { name: "Initialization",
+    commands: [
+      { text: "Run Health Check", command: "2", targetState: "Ready" }
+    ]},
   { name: "Health Check", commands: [] }, // No button for this state
-  { name: "Ready", commands: [{ text: "Levitation On", command: "3" }] },
-  { name: "Levitation", commands: [
-    { text: "Levitation Off", command: "4" },
-    { text: "Propulsion On", command: "5" }
-  ] },
+  { name: "Ready",
+    commands: [
+      { text: "Levitation On", command: "3", targetState: "Levitation" }
+    ]},
+  { name: "Levitation",
+    commands: [
+      { text: "Levitation Off", command: "4", targetState: "Ready" },
+      { text: "Propulsion On", command: "5", targetState: "Propulsion" }
+    ]},
   { name: "Propulsion", commands: [] }, // No button for this state
-  { name: "Coasting", commands: [{ text: "Braking", command: "6" }] },
+  { name: "Coasting",
+    commands: [
+      { text: "Braking", command: "6", targetState: "Stopped" }
+    ]},
   { name: "Braking", commands: [] }, // No button for this state
   { name: "Stopped", commands: [] } // No button for this state
 ];
+
 const initialState = {
   tempSensors: Array(12).fill(0),  // This could be adjusted or used differently depending on your exact needs
   hallEffectSensors: Array(8).fill(0),
@@ -94,6 +105,8 @@ const sensorReducer = (state, action) => {
 };
 
 function App() {
+  const [isSendingIdle, setIsSendingIdle] = useState(false); // Initially, do not send idle commands
+  const [idleCommandAllowed, setIdleCommandAllowed] = useState(true); // Control idle commands based on state changes
   const [port, setPort] = useState();
   const [reader, setReader] = useState(null);
   const [displayedData, dispatch] = useReducer(sensorReducer, initialState);
@@ -105,6 +118,9 @@ function App() {
   const consoleRef = useRef(null);
   const [spacePressCount, setSpacePressCount] = useState(0);
   const spaceTimeoutRef = useRef(null);
+  const [currentCommand, setCurrentCommand] = useState({ commandText: '', commandCode: '', targetState: '' });
+  const [keepSendingCommand, setKeepSendingCommand] = useState(false);
+
 
   const addToConsole = (msg) => {
     setConsoleMessages(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
@@ -195,13 +211,14 @@ function App() {
   };
 
   const processSerialData = (dataString) => {
-    if (!dataString) {
-      console.error("Attempted to process empty or undefined data.");
-      return;
+    console.log("Received data:", dataString);  // Log the raw data for debugging
+
+    if (!dataString || dataString === "lost") {
+        console.error("Connection lost or invalid data.");
+        setPodConnected(false);  // Update connection status
+        addToConsole("Radio Connection Lost");  // Add to console
+        return;
     }
-  
-    // Log the data being processed for debugging
-    console.log("Processing data:", dataString);
   
     let packetInfo, data;
     try {
@@ -236,25 +253,22 @@ function App() {
       console.log("Serial port is already opened");
       return;
     }
-  
+
     try {
       const tempPort = await navigator.serial.requestPort();
       await tempPort.open({ baudRate: 115200 });
       setPort(tempPort);
+      setPodConnected(true); // Explicitly set when the port is successfully opened
       console.log("Serial port opened");
       readSerialData(); // Start reading after opening the port
-      // Optionally set podConnected to true here if you want immediate feedback
-      // setPodConnected(true);
-      addToConsole("Attempted to open serial port.");
+      addToConsole("Serial port opened successfully.");
     } catch (error) {
       console.error("Failed to open serial port:", error);
-      // Consider setting podConnected to false here to indicate failure to connect
-      setPodConnected(false);
+      setPodConnected(false); // Set to false if opening the port fails
       addToConsole("Failed to open serial port.");
     }
-  };
+};
   
-
   const readSerialData = async () => {
     if (!port) {
       console.log("Serial port is not set");
@@ -299,62 +313,95 @@ function App() {
         let newlineIndex;
         while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
           const line = buffer.substring(0, newlineIndex + 1);
+          setFileWriterData(line);
           processSerialData(line.trim());
           buffer = buffer.substring(newlineIndex + 1);
         }
       }
     } catch (error) {
       console.error("Error reading from serial port:", error);
+      setPodConnected(false);
       newReader.releaseLock();
       setReader(null);
     }
   };
 
-  // Function to toggle the LED
-  const toggleLED = async () => {
+  const sendIdleCommand = useCallback(async () => {
+    if (!port || !port.writable || !isSendingIdle) {
+      console.log("Cannot send idle command, port not writable or idle not required.");
+      return;
+    }
+
     try {
-      console.log("toggleLED function called");
-      if (!port || !port.writable) {
-        console.log("Port is not open or writable");
-        return;
-      }
-  
-      console.log("Sending toggle command to Arduino");
       const writer = port.writable.getWriter();
-      const data = new TextEncoder().encode('toggleLED\n');
+      setCommand('8');
+      const data = new TextEncoder().encode('8\n');  // Idle command is '8'
       await writer.write(data);
       writer.releaseLock();
     } catch (error) {
-      console.error("Error in toggleLED function:", error);
+      console.error("Error sending idle command:", error);
     }
-  };
+  }, [port, isSendingIdle]);
 
-  const sendCommand = useCallback(async (commandText, commandCode) => {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isSendingIdle) {
+        sendIdleCommand();
+      }
+    }, 1000);  // Send idle command every second
+
+    return () => clearInterval(interval);
+  }, [sendIdleCommand, isSendingIdle]);
+
+  const sendCommand = useCallback(async (commandText, commandCode, targetState = '', initialCall = false) => {
+    setIsSendingIdle(false);  // Stop sending idle command when a specific command is being sent
+    setCurrentCommand({ commandText, commandCode, targetState });
+    setKeepSendingCommand(true);
+
     if (!port || !port.writable) {
-      addToConsole(`Port is not open or writable. Command: '${commandText}' not sent`);
+      if (initialCall) {
+        addToConsole(`Port is not open or writable. Could not send command: '${commandText}'`);
+      }
       return;
     }
-  
+
     try {
-      console.log(`Sending command: ${commandText}`);
+      if (initialCall) {
+        console.log(`Attempting to send command: ${commandText}`);
+        addToConsole(`Attempting to send command: ${commandText}`);
+      }
+      setCommand(commandCode);
       const writer = port.writable.getWriter();
       const data = new TextEncoder().encode(`${commandCode}\n`);
       await writer.write(data);
       writer.releaseLock();
-      addToConsole(`Command '${commandText}' sent successfully.`);
-  
-      // Check if the command is 'Emergency Stop' and update pod state to 'Stopped'
-      if (commandCode === '7') {
-        dispatch({ type: 'UPDATE_POD_STATE', payload: "Stopped" });
-      }
-  
     } catch (error) {
       console.error("Error sending command:", error);
       addToConsole(`Failed to send command: ${commandText}`);
+    } finally {
+      setIsSendingIdle(true);  // Resume idle command sending after attempt
     }
-  }, [port]);
+  }, [port]); 
   
+  useEffect(() => {
+    let commandInterval;
+    if (keepSendingCommand && currentCommand.targetState) {
+      if (displayedData.podState !== currentCommand.targetState) {
+        commandInterval = setInterval(() => {
+          // Call sendCommand without the initialCall flag after the first time
+          sendCommand(currentCommand.commandText, currentCommand.commandCode, currentCommand.targetState);
+        }, 100); // Continuously send command every second until state changes
+      } else {
+        addToConsole(`Command '${currentCommand.commandText}' sent successfully.`);
+        clearInterval(commandInterval);
+        setKeepSendingCommand(false);
+        setCurrentCommand({ commandText: '', commandCode: '', targetState: '' });
+      }
+    }
   
+    return () => clearInterval(commandInterval);
+  }, [keepSendingCommand, currentCommand, displayedData.podState, sendCommand]);  
+
   // Effect to process buffered data at regular intervals
   useEffect(() => {
     const processDataInterval = setInterval(() => {
@@ -388,7 +435,7 @@ function App() {
             event.preventDefault(); // Prevent default behavior if needed
             setSpacePressCount(prevCount => {
                 if (prevCount === 2) {
-                    sendCommand('7'); // Replace this with the actual command
+                    sendCommand('Emergency Stop', '7', 'Stopped', true);
                     return 0; // Reset counter after sending command
                 }
                 return prevCount + 1;
@@ -454,7 +501,7 @@ useEffect(() => {
                   .filter(state => state.name === displayedData.podState)
                   .flatMap(state => state.commands)
                   .map((command, index) => (
-                    <button key={index} className="state-change-button" onClick={() => sendCommand(command.text, command.code)}>
+                    <button key={index} className="state-change-button" onClick={() => sendCommand(command.text, command.command, command.targetState, true)}>
                       {command.text}
                     </button>
                 ))}
@@ -467,7 +514,7 @@ useEffect(() => {
                   <div className="button-section">
                     {/* Navbar with buttons */}
                     <button onClick={openSerialPort}>Open Serial Port</button>
-                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('Emergency Stop', '7')}>Emergency Stop</button>
+                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('Emergency Stop', '7', 'Stopped', true)}>Emergency Stop</button>
                     <FileWriter data={fileWriterData} sentData={commandToBeSent} />
                   </div>
 

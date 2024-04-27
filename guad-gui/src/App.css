@@ -329,7 +329,7 @@ tr:nth-child(even) {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 10px 0;
+  padding: 5px 0;
   margin: 10px 0;
   background-color: #292929;
   border-radius: 10px;
