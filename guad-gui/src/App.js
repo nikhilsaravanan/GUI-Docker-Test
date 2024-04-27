@@ -326,35 +326,38 @@ function App() {
     }
   };
 
+  // Function to send the idle command
   const sendIdleCommand = useCallback(async () => {
-    if (!port || !port.writable || !isSendingIdle) {
-      console.log("Cannot send idle command, port not writable or idle not required.");
+    if (!port || !port.writable || !isSendingIdle || !idleCommandAllowed) {
+      console.log("Cannot send idle command, port not writable or not allowed.");
       return;
     }
-
     try {
       const writer = port.writable.getWriter();
-      setCommand('8');
-      const data = new TextEncoder().encode('8\n');  // Idle command is '8'
+      setCommand('8')
+      const data = new TextEncoder().encode('8\n');
       await writer.write(data);
       writer.releaseLock();
     } catch (error) {
       console.error("Error sending idle command:", error);
     }
-  }, [port, isSendingIdle]);
+  }, [port, isSendingIdle, idleCommandAllowed]);
 
+  // Set up an interval for sending the idle command
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isSendingIdle) {
+      if (isSendingIdle && idleCommandAllowed) {
         sendIdleCommand();
       }
-    }, 1000);  // Send idle command every second
+    }, 1000); // Every second, send an idle command if allowed
 
     return () => clearInterval(interval);
-  }, [sendIdleCommand, isSendingIdle]);
+  }, [sendIdleCommand, isSendingIdle, idleCommandAllowed]);
 
+  // Send command function updated to prevent idle command during command sending
   const sendCommand = useCallback(async (commandText, commandCode, targetState = '', initialCall = false) => {
-    setIsSendingIdle(false);  // Stop sending idle command when a specific command is being sent
+    setIsSendingIdle(false);
+    setIdleCommandAllowed(false); // Disallow idle command sending when a command is being sent
     setCurrentCommand({ commandText, commandCode, targetState });
     setKeepSendingCommand(true);
 
@@ -364,13 +367,12 @@ function App() {
       }
       return;
     }
-
     try {
       if (initialCall) {
         console.log(`Attempting to send command: ${commandText}`);
         addToConsole(`Attempting to send command: ${commandText}`);
       }
-      setCommand(commandCode);
+      setCommand(commandCode)
       const writer = port.writable.getWriter();
       const data = new TextEncoder().encode(`${commandCode}\n`);
       await writer.write(data);
@@ -379,11 +381,14 @@ function App() {
       console.error("Error sending command:", error);
       addToConsole(`Failed to send command: ${commandText}`);
     } finally {
-      setIsSendingIdle(true);  // Resume idle command sending after attempt
+      setIsSendingIdle(true);
     }
-  }, [port]); 
+  }, [port]);
   
   useEffect(() => {
+    if (displayedData.podState === currentCommand.targetState) {
+      setIdleCommandAllowed(true);
+    }
     let commandInterval;
     if (keepSendingCommand && currentCommand.targetState) {
       if (displayedData.podState !== currentCommand.targetState) {
