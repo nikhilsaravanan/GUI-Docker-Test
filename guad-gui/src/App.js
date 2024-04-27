@@ -5,6 +5,19 @@ import logo from './components/white_guad.png'; // Make sure the path is correct
 import podImage from './components/pod_top.png';
 import './App.css';
 
+const stateDescriptions = [
+  { name: "Initialization", commands: [{ text: "Run Health Check", command: "2" }] },
+  { name: "Health Check", commands: [] }, // No button for this state
+  { name: "Ready", commands: [{ text: "Levitation On", command: "3" }] },
+  { name: "Levitation", commands: [
+    { text: "Levitation Off", command: "4" },
+    { text: "Propulsion On", command: "5" }
+  ] },
+  { name: "Propulsion", commands: [] }, // No button for this state
+  { name: "Coasting", commands: [{ text: "Braking", command: "6" }] },
+  { name: "Braking", commands: [] }, // No button for this state
+  { name: "Stopped", commands: [] } // No button for this state
+];
 const initialState = {
   tempSensors: Array(12).fill(0),  // This could be adjusted or used differently depending on your exact needs
   hallEffectSensors: Array(8).fill(0),
@@ -22,7 +35,7 @@ const initialState = {
       gyroscope: { x: 0, y: 0, z: 0 }
     }
   },
-  podState: 'INITIALIZATION',
+  podState: stateDescriptions[0].name,
   podHealth: true,
   gapHeightSensors: Array(8).fill(0.00),
   batteryVoltages: Array(144).fill(0.00),
@@ -103,21 +116,6 @@ function App() {
     }
 }, [consoleMessages]);
 
-  const [podStatus, setPodStatus] = useState({
-    brakes: 'OK',
-    CCU: 'OK',
-    VCU: 'OK',
-    BMS: 'OK',
-  });
-  const [podData, setPodData] = useState({
-    speed: 0,
-    acceleration: 0,
-  });
-  const [errors, setErrors] = useState([
-    { name: 'Main Emergency', status: 'OK', message: 'No emergency' },
-    { name: 'CCU Error', status: 'OK', message: 'No CCU error' },
-    { name: 'VCU Error', status: 'OK', message: 'No VCU error' }
-  ]);
   const dataProcessingInterval = 1000; // Interval for processing buffered data
   const [activeTab, setActiveTab] = useState('sensors'); // Default active tab
   // Calculate low, high, and average temperatures
@@ -221,9 +219,10 @@ function App() {
     let values = data.split(',').map(Number);
     
     let stateCode = values[1];
+    let newState = stateDescriptions[stateCode].name || 'Unknown State';
     let healthStatus = values[2] === 1;
     
-    dispatch({ type: 'UPDATE_POD_STATE', payload: stateCode });
+    dispatch({ type: 'UPDATE_POD_STATE', payload: newState });
     dispatch({ type: 'UPDATE_POD_HEALTH', payload: healthStatus });
   
     if (packetHandlers.hasOwnProperty(packetType)) {
@@ -330,26 +329,32 @@ function App() {
     }
   };
 
-  const sendCommand = useCallback(async (command) => {
+  const sendCommand = useCallback(async (commandText, commandCode) => {
     if (!port || !port.writable) {
-        addToConsole(`Port is not open or writable. Command: '${command}' not sent`);
-        return;
+      addToConsole(`Port is not open or writable. Command: '${commandText}' not sent`);
+      return;
     }
   
     try {
-        console.log(`Sending command: ${command}`);
-        const writer = port.writable.getWriter();
-        setCommand("A COMMAND WAS SENT TO THE POD: " + command);
-        const data = new TextEncoder().encode(`${command}\n`);
-        await writer.write(data);
-        writer.releaseLock();
-        addToConsole(`Command '${command}' sent successfully.`);
+      console.log(`Sending command: ${commandText}`);
+      const writer = port.writable.getWriter();
+      const data = new TextEncoder().encode(`${commandCode}\n`);
+      await writer.write(data);
+      writer.releaseLock();
+      addToConsole(`Command '${commandText}' sent successfully.`);
+  
+      // Check if the command is 'Emergency Stop' and update pod state to 'Stopped'
+      if (commandCode === '7') {
+        dispatch({ type: 'UPDATE_POD_STATE', payload: "Stopped" });
+      }
+  
     } catch (error) {
-        console.error("Error sending command:", error);
-        addToConsole(`Failed to send command: ${command}`);
+      console.error("Error sending command:", error);
+      addToConsole(`Failed to send command: ${commandText}`);
     }
-}, [port]);
-
+  }, [port]);
+  
+  
   // Effect to process buffered data at regular intervals
   useEffect(() => {
     const processDataInterval = setInterval(() => {
@@ -383,7 +388,7 @@ function App() {
             event.preventDefault(); // Prevent default behavior if needed
             setSpacePressCount(prevCount => {
                 if (prevCount === 2) {
-                    sendCommand('Emergency Stop'); // Replace this with the actual command
+                    sendCommand('7'); // Replace this with the actual command
                     return 0; // Reset counter after sending command
                 }
                 return prevCount + 1;
@@ -435,23 +440,38 @@ useEffect(() => {
               <div className="disconnected-banner">
                 Pod Disconnected
               </div>
-            )}    
+            )}
+            <div className="state-pills-container">
+              <div className="state-pills-bar">
+                {stateDescriptions.map(state => (
+                  <div key={state.name} className={`state-pill ${displayedData.podState === state.name ? "active" : ""}`}>
+                    {state.name}
+                  </div>
+                ))}
+
+                {/* Dynamically generate buttons for the active state */}
+                {stateDescriptions
+                  .filter(state => state.name === displayedData.podState)
+                  .flatMap(state => state.commands)
+                  .map((command, index) => (
+                    <button key={index} className="state-change-button" onClick={() => sendCommand(command.text, command.code)}>
+                      {command.text}
+                    </button>
+                ))}
+              </div>
+            </div>
+
             <div className="hero-section">
               <div className="half1">
                 <div className="col1">
                   <div className="button-section">
                     {/* Navbar with buttons */}
                     <button onClick={openSerialPort}>Open Serial Port</button>
-                    <button onClick={() => sendCommand('1')}>Levitation On</button>
-                    <button onClick={() => sendCommand('0')}>Levitation Off</button>
-                    <button onClick={toggleLED}>Toggle LED</button>
-                    <button onClick={toggleLED}>Toggle LED</button>
-                    <button onClick={() => sendCommand('1')}>Run</button>
-                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('1')}>Emergency Stop</button>
+                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('Emergency Stop', '7')}>Emergency Stop</button>
                     <FileWriter data={fileWriterData} sentData={commandToBeSent} />
                   </div>
 
-                  <div className="pod-image-container">
+                  {/* <div className="pod-image-container">
                     <div className="pod-status-grid">
                       <div className="status-item">
                         <div className={`status-indicator ${podStatus.BMS.toLowerCase()}`}></div>
@@ -470,7 +490,7 @@ useEffect(() => {
                         <span>Brakes: {podStatus.brakes}</span>
                       </div>
                     </div>
-                  </div>
+                  </div> */}
                 </div>
 
                 <div className="col2">
@@ -479,7 +499,7 @@ useEffect(() => {
                       <div className="progress-bar">
                         <h5 style={{margin: 0}}>Speed</h5>
                         <SemiCircleProgressBar 
-                          percentage={podData.speed} 
+                          percentage={Math.abs(displayedData.imuData.front.accelerometer.x * 10)}
                           diameter={150} 
                           showPercentValue={false}
                           strokeWidth={20} 
@@ -492,7 +512,7 @@ useEffect(() => {
                       <div className="progress-bar">
                         <h5 style={{margin: 0}}>Acceleration</h5>
                         <SemiCircleProgressBar 
-                          percentage={podData.acceleration} 
+                          percentage={Math.abs(displayedData.imuData.front.accelerometer.x * 10)}
                           diameter={150} 
                           showPercentValue={false}
                           strokeWidth={20} 
