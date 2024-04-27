@@ -304,7 +304,7 @@ tr:nth-child(even) {
   color: #cc0000;
   padding: 10px;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 5px;
   border-radius: 5px;
 }
 
@@ -324,6 +324,43 @@ tr:nth-child(even) {
   width: 100%;
   /* Ensure the container takes full width */
 }
+
+.state-pills-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5px 0;
+  margin: 10px 0;
+  background-color: #292929;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  width: 100%;
+}
+
+.state-pills-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.state-pill {
+  padding: 5px 15px;
+  color: #ccc;
+  /* Light text for readability */
+  border-radius: 5px;
+  /* Rounded pills */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  /* Smooth transitions for interaction feedback */
+}
+
+.state-pill.active {
+  color: #00ff11;
+}
+
 
 .half1 {
   display: flex;
