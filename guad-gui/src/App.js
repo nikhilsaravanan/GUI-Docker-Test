@@ -572,7 +572,7 @@ useEffect(() => {
                           className="progressBar" 
                           style={{ right: "100" }} 
                         />
-                        <p className="unit">m²/s</p>
+                        <p className="unit">m/s²</p>
                       </div>
                     </div>
                   </div>
