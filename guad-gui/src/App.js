@@ -369,8 +369,8 @@ function App() {
     }
     try {
       if (initialCall) {
-        console.log(`Attempting to send command: ${commandText}`);
-        addToConsole(`Attempting to send command: ${commandText}`);
+        console.log(`Attempting to send command: ${commandText}, ${commandCode}`);
+        addToConsole(`Attempting to send command: ${commandText}, ${commandCode}`);
       }
       setCommand(commandCode)
       const writer = port.writable.getWriter();
@@ -397,7 +397,7 @@ function App() {
           sendCommand(currentCommand.commandText, currentCommand.commandCode, currentCommand.targetState);
         }, 100); // Continuously send command every second until state changes
       } else {
-        addToConsole(`Command '${currentCommand.commandText}' sent successfully.`);
+        addToConsole(`Command '${currentCommand.commandText}, ${currentCommand.commandCode}' sent successfully.`);
         clearInterval(commandInterval);
         setKeepSendingCommand(false);
         setCurrentCommand({ commandText: '', commandCode: '', targetState: '' });
