@@ -75,10 +75,10 @@ const FileWriter = ({ data, sentData }) => {
   };
  
   return (
-    <div>
+    <>
       <button onClick={openFileWriter}>Open File Writer</button>
       <button onClick={closeFileWriter}>Close File Writer</button>
-    </div>
+    </>
   );
 };
  

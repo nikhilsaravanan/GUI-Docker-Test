@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import SemiCircleProgressBar from "react-progressbar-semicircle";
 import FileWriter from './components/FileWriter';
+import mongoDBService from './services/mongoDBService';
 import logo from './components/white_guad.png'; // Make sure the path is correct
 import podImage from './components/pod_top.png';
 import './App.css';
@@ -30,8 +31,44 @@ const stateDescriptions = [
 ];
 
 const initialState = {
-  tempSensors: Array(12).fill(0),  // This could be adjusted or used differently depending on your exact needs
-  hallEffectSensors: Array(8).fill(0),
+  tempSensors: {
+    frontHub: {
+      leftYokeFront: 0,
+      leftYokeBack: 0,
+      rightYokeFront: 0,
+      rightYokeBack: 0
+    },
+    centerHub: {
+      limLeft: 0,
+      limRight: 0
+    },
+    rearHub: {
+      leftYokeFront: 0,
+      leftYokeBack: 0,
+      rightYokeFront: 0,
+      rightYokeBack: 0
+    }
+  },
+  hallEffectSensors: {
+    frontHub: {
+      leftYokeFront: 0,
+      leftYokeBack: 0,
+      rightYokeFront: 0,
+      rightYokeBack: 0,
+      limCenter: 0
+    },
+    centerHub: {
+      limLeft: 0,
+      limRight: 0
+    },
+    rearHub: {
+      leftYokeFront: 0,
+      leftYokeBack: 0,
+      rightYokeFront: 0,
+      rightYokeBack: 0,
+      limCenter: 0
+    }
+  },
   imuData: {
     rear: {
       accelerometer: { x: 0, y: 0, z: 0 },
@@ -49,14 +86,7 @@ const initialState = {
   podState: stateDescriptions[0].name,
   podHealth: true,
   gapHeightSensors: Array(8).fill(0.00),
-  batteryVoltages: Array(144).fill(0.00),
-  limTemps: {
-    frontRight: 0, frontLeft: 0, backRight: 0, backLeft: 0
-  },
-  yokeTemps: {
-    verticalFrontRight: 0, verticalFrontLeft: 0, verticalBackRight: 0, verticalBackLeft: 0,
-    lateralFrontRight: 0, lateralFrontLeft: 0, lateralBackRight: 0, lateralBackLeft: 0
-  }
+  batteryVoltages: Array(144).fill(0.00)
 };
 
 const sensorReducer = (state, action) => {
@@ -86,19 +116,9 @@ const sensorReducer = (state, action) => {
         };
       
     case 'UPDATE_HALL_EFFECT_SENSORS':
-      return { ...state, hallEffectSensors: action.payload };
-    case 'UPDATE_TEMPERATURES':
-      return {
-        ...state,
-        limTemps: {
-          ...state.limTemps,
-          ...action.payload.limTemps
-        },
-        yokeTemps: {
-          ...state.yokeTemps,
-          ...action.payload.yokeTemps
-        }
-      };
+      return { ...state, hallEffectSensors: { ...state.hallEffectSensors, ...action.payload } };
+    case 'UPDATE_TEMP_SENSORS':
+      return { ...state, tempSensors: { ...state.tempSensors, ...action.payload } };
     default:
       return state;
   }
@@ -120,6 +140,8 @@ function App() {
   const spaceTimeoutRef = useRef(null);
   const [currentCommand, setCurrentCommand] = useState({ commandText: '', commandCode: '', targetState: '' });
   const [keepSendingCommand, setKeepSendingCommand] = useState(false);
+  const [mongoDBConnected, setMongoDBConnected] = useState(false); // MongoDB connection status
+  const [saveToMongoDB, setSaveToMongoDB] = useState(true); // Toggle for saving to MongoDB
 
 
   const addToConsole = (msg) => {
@@ -132,19 +154,50 @@ function App() {
     }
 }, [consoleMessages]);
 
+  // Check MongoDB connection on component mount
+  useEffect(() => {
+    const checkMongoDBConnection = async () => {
+      try {
+        const health = await mongoDBService.checkHealth();
+        if (health.status === 'ok' && health.mongodb === 'connected') {
+          setMongoDBConnected(true);
+          addToConsole('MongoDB connected successfully');
+        } else {
+          setMongoDBConnected(false);
+          addToConsole('MongoDB connection failed');
+        }
+      } catch (error) {
+        setMongoDBConnected(false);
+        addToConsole('Backend server not reachable');
+      }
+    };
+    checkMongoDBConnection();
+  }, []);
+
   const dataProcessingInterval = 1000; // Interval for processing buffered data
   const [activeTab, setActiveTab] = useState('sensors'); // Default active tab
-  // Calculate low, high, and average temperatures
-  const flattenTemps = (temps) => {
-    // Extract all temperature values into a single array
-    return Object.values(temps).flat();
+  const [sidebarVisible, setSidebarVisible] = useState(true); // State to toggle sidebar visibility
+  
+  // Calculate low, high, and average temperatures from new nested structure
+  const getAllTemps = () => {
+    const temps = [];
+    // Front Hub
+    temps.push(displayedData.tempSensors.frontHub.leftYokeFront);
+    temps.push(displayedData.tempSensors.frontHub.leftYokeBack);
+    temps.push(displayedData.tempSensors.frontHub.rightYokeFront);
+    temps.push(displayedData.tempSensors.frontHub.rightYokeBack);
+    // Center Hub
+    temps.push(displayedData.tempSensors.centerHub.limLeft);
+    temps.push(displayedData.tempSensors.centerHub.limRight);
+    // Rear Hub
+    temps.push(displayedData.tempSensors.rearHub.leftYokeFront);
+    temps.push(displayedData.tempSensors.rearHub.leftYokeBack);
+    temps.push(displayedData.tempSensors.rearHub.rightYokeFront);
+    temps.push(displayedData.tempSensors.rearHub.rightYokeBack);
+    return temps;
   };
   
-  const allTemps = [
-    ...flattenTemps(displayedData.limTemps),
-    ...flattenTemps(displayedData.yokeTemps)
-  ];
-  
+  const allTemps = getAllTemps();
   const lowTemperature = Math.min(...allTemps);
   const highTemperature = Math.max(...allTemps);
   const averageTemperature = allTemps.reduce((acc, curr) => acc + curr, 0) / allTemps.length;
@@ -173,17 +226,15 @@ function App() {
   };  
 
   const packetHandlers = {
-    1: (values) => { // IMU Angular velocities for Rear, Center, Front and Lateral Hall Effect Sensors
+    1: (values) => { // IMU Angular velocities for Rear, Center, Front
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', sensorType: 'gyroscope', data: { x: values[0], y: values[1], z: values[2] } } });
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', sensorType: 'gyroscope', data: { x: values[3], y: values[4], z: values[5] } } });
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', sensorType: 'gyroscope', data: { x: values[6], y: values[7], z: values[8] } } });
-      dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values.slice(9, 13) }); // Assuming these are the Lateral Hall Effect Sensors
     },
-    2: (values) => { // IMU Accelerations for Rear, Center, Front and Vertical Hall Effect Sensors
+    2: (values) => { // IMU Accelerations for Rear, Center, Front
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'rear', sensorType: 'accelerometer', data: { x: values[0], y: values[1], z: values[2] } } });
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'center', sensorType: 'accelerometer', data: { x: values[3], y: values[4], z: values[5] } } });
       dispatch({ type: 'UPDATE_IMU_DATA', payload: { position: 'front', sensorType: 'accelerometer', data: { x: values[6], y: values[7], z: values[8] } } });
-      dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: values.slice(9, 13) }); // Assuming these are the Vertical Hall Effect Sensors
     },
     3: (values) => { // Lateral and Vertical Gap Sensors
       dispatch({ type: 'UPDATE_GAP_HEIGHT_SENSORS', payload: {
@@ -191,12 +242,45 @@ function App() {
         vertical: { frontRight: values[4], frontLeft: values[5], backRight: values[6], backLeft: values[7] }
       }});
     },
-    4: (values) => { // Temperatures for various components
-      dispatch({ type: 'UPDATE_TEMPERATURES', payload: {
-        limTemps: { frontRight: values[0], frontLeft: values[1], backRight: values[2], backLeft: values[3] },
-        yokeTemps: {
-          verticalFrontRight: values[4], verticalFrontLeft: values[5], verticalBackRight: values[6], verticalBackLeft: values[7],
-          lateralFrontRight: values[8], lateralFrontLeft: values[9], lateralBackRight: values[10], lateralBackLeft: values[11]
+    4: (values) => { // Temperature sensors: Front Hub (4), Center Hub (2), Rear Hub (4)
+      dispatch({ type: 'UPDATE_TEMP_SENSORS', payload: {
+        frontHub: {
+          leftYokeFront: values[0],
+          leftYokeBack: values[1],
+          rightYokeFront: values[2],
+          rightYokeBack: values[3]
+        },
+        centerHub: {
+          limLeft: values[4],
+          limRight: values[5]
+        },
+        rearHub: {
+          leftYokeFront: values[6],
+          leftYokeBack: values[7],
+          rightYokeFront: values[8],
+          rightYokeBack: values[9]
+        }
+      }});
+    },
+    5: (values) => { // Hall Effect sensors: Front Hub (5), Center Hub (2), Rear Hub (5)
+      dispatch({ type: 'UPDATE_HALL_EFFECT_SENSORS', payload: {
+        frontHub: {
+          leftYokeFront: values[0],
+          leftYokeBack: values[1],
+          rightYokeFront: values[2],
+          rightYokeBack: values[3],
+          limCenter: values[4]
+        },
+        centerHub: {
+          limLeft: values[5],
+          limRight: values[6]
+        },
+        rearHub: {
+          leftYokeFront: values[7],
+          leftYokeBack: values[8],
+          rightYokeFront: values[9],
+          rightYokeBack: values[10],
+          limCenter: values[11]
         }
       }});
     }
@@ -244,6 +328,26 @@ function App() {
   
     if (packetHandlers.hasOwnProperty(packetType)) {
       packetHandlers[packetType](values.slice(3)); // Pass only the data values
+    }
+
+    // Save to MongoDB if enabled and connected
+    if (saveToMongoDB && mongoDBConnected) {
+      const sensorData = {
+        packetType,
+        stateCode,
+        healthStatus,
+        values: values.slice(3)
+      };
+      
+      mongoDBService.saveSensorData(
+        packetType,
+        newState,
+        healthStatus,
+        sensorData,
+        dataString
+      ).catch(error => {
+        console.error('Failed to save to MongoDB:', error);
+      });
     }
   };
   
@@ -484,6 +588,13 @@ useEffect(() => {
     <div className="App">
       <div className="navbar-top">
         <img src={logo} className="logo" alt="Logo" />
+        <button 
+          className="sidebar-toggle-btn" 
+          onClick={() => setSidebarVisible(!sidebarVisible)}
+          title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+        >
+          {sidebarVisible ? '›' : '‹'}
+        </button>
       </div>
       <div className="content">
         <div className="container">
@@ -519,8 +630,12 @@ useEffect(() => {
                   <div className="button-section">
                     {/* Navbar with buttons */}
                     <button onClick={openSerialPort}>Open Serial Port</button>
-                    <button style={{backgroundColor: '#FF0000'}} onClick={() => sendCommand('Emergency Stop', '7', 'Stopped', true)}>Emergency Stop</button>
                     <FileWriter data={fileWriterData} sentData={commandToBeSent} />
+                    <button className="emergency-stop-btn" onClick={() => sendCommand('Emergency Stop', '7', 'Stopped', true)}>Emergency Stop</button>
+                  </div>
+                  
+                  <div className="pod-image-container">
+                    <img src={podImage} alt="Pod" className="pod-image" />
                   </div>
 
                   {/* <div className="pod-image-container">
@@ -546,38 +661,137 @@ useEffect(() => {
                 </div>
 
                 <div className="col2">
-                  <div className="speed-acceleration-section">
-                    <div className="progress-bars">
-                      <div className="progress-bar">
-                        <h5 style={{margin: 0}}>Speed</h5>
-                        <SemiCircleProgressBar 
-                          percentage={Math.abs(displayedData.imuData.front.accelerometer.x * 10)}
-                          diameter={150} 
-                          showPercentValue={false}
-                          strokeWidth={20} 
-                          background={"#7d818a"} 
-                          className="progressBar" 
-                          style={{ right: "100" }} 
-                        />
-                        <p className="unit">m/s</p>
+                  <div className="top-middle-section">
+                    <div className="speed-acceleration-section">
+                      <div className="progress-bars">
+                        <div className="progress-bar">
+                          <h5 style={{margin: 0}}>Acceleration</h5>
+                          <SemiCircleProgressBar 
+                            percentage={Math.abs(displayedData.imuData.front.accelerometer.x * 10)}
+                            diameter={150} 
+                            showPercentValue={false}
+                            strokeWidth={20} 
+                            background={"#7d818a"} 
+                            className="progressBar" 
+                            style={{ right: "100" }} 
+                          />
+                          <p className="unit">m/s²</p>
+                        </div>
                       </div>
-                      <div className="progress-bar">
-                        <h5 style={{margin: 0}}>Acceleration</h5>
-                        <SemiCircleProgressBar 
-                          percentage={Math.abs(displayedData.imuData.front.accelerometer.x * 10)}
-                          diameter={150} 
-                          showPercentValue={false}
-                          strokeWidth={20} 
-                          background={"#7d818a"} 
-                          className="progressBar" 
-                          style={{ right: "100" }} 
-                        />
-                        <p className="unit">m/s²</p>
+                    </div>
+                    
+                    <div className="sensor-data-section">
+                      <h5 style={{textAlign: 'center'}}>Vertical (mm)</h5>
+                      <div className="barsContainer">
+                      {displayedData.gapHeightSensors.slice(0, 4).map((gapHeight, index) => (
+                          <div key={`gapHeight-${index}`}>
+                            <div className="labelSide">20mm</div>
+                            <div className="gapHeightBarContainer">
+                              {/* Invert the moving bar's position logic */}
+                              <div
+                                className="movingBar"
+                                style={{ 
+                                  top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
+                                  transition: 'top 0.3s ease', // Smooth transition for the movement
+                                  backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
+                                    gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
+                                    '#FF0000' // Red for 13-20
+                                }}
+                              ></div>
+                            </div>
+                            <div className="valueIndicator">
+                              {gapHeight.toFixed(2)}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-                  <div className="pod-image-container">
-                    <img src={podImage} alt="Pod" className="pod-image" />
+
+                  {/* Temperature Sensors Section */}
+                  <div className="sensor-data-section temperature-grid-section">
+                    <h4>Temperature Sensors (°C)</h4>
+                    <div className="temp-sensors-grid">
+                      {/* Front Hub */}
+                      <div className="hub-section">
+                        <h5>Front Hub</h5>
+                        <div className="temp-grid">
+                          <div className="temp-item">
+                            <span className="temp-label">L Yoke F</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.frontHub.leftYokeFront > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.frontHub.leftYokeFront.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">L Yoke B</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.frontHub.leftYokeBack > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.frontHub.leftYokeBack.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">R Yoke F</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.frontHub.rightYokeFront > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.frontHub.rightYokeFront.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">R Yoke B</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.frontHub.rightYokeBack > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.frontHub.rightYokeBack.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Center Hub */}
+                      <div className="hub-section">
+                        <h5>Center Hub</h5>
+                        <div className="temp-grid">
+                          <div className="temp-item">
+                            <span className="temp-label">LIM Left</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.centerHub.limLeft > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.centerHub.limLeft.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">LIM Right</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.centerHub.limRight > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.centerHub.limRight.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Rear Hub */}
+                      <div className="hub-section">
+                        <h5>Rear Hub</h5>
+                        <div className="temp-grid">
+                          <div className="temp-item">
+                            <span className="temp-label">L Yoke F</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.rearHub.leftYokeFront > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.rearHub.leftYokeFront.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">L Yoke B</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.rearHub.leftYokeBack > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.rearHub.leftYokeBack.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">R Yoke F</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.rearHub.rightYokeFront > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.rearHub.rightYokeFront.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="temp-item">
+                            <span className="temp-label">R Yoke B</span>
+                            <span className="temp-value" style={{color: displayedData.tempSensors.rearHub.rightYokeBack > 80 ? '#f87171' : '#4ade80'}}>
+                              {displayedData.tempSensors.rearHub.rightYokeBack.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
@@ -592,58 +806,6 @@ useEffect(() => {
               </div>
 
               <div className="col3">
-                <div className="allbarsdiv">
-                <div className="sensor-data-section">
-                    <h4>Vertical (mm)</h4>
-                    <div className="barsContainer">
-                    {displayedData.gapHeightSensors.slice(0, 4).map((gapHeight, index) => (
-                        <div key={`gapHeight-${index}`}>
-                          <div className="labelSide">20mm</div>
-                          <div className="gapHeightBarContainer">
-                            {/* Invert the moving bar's position logic */}
-                            <div
-                              className="movingBar"
-                              style={{ 
-                                top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
-                                transition: 'top 0.3s ease', // Smooth transition for the movement
-                                backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
-                                  gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
-                                  '#FF0000' // Red for 13-20
-                              }}
-                            ></div>
-                          </div>
-                          <div className="valueIndicator">
-                            {gapHeight.toFixed(2)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="sensor-data-section">
-                    <h4>Lateral (mm)</h4>
-                    <div className="barsContainer">
-                    {displayedData.gapHeightSensors.slice(4, 8).map((gapHeight, index) => (
-                        <div key={`gapHeight-${index}`}>
-                          <div className="labelSide">20mm</div>
-                          <div className="gapHeightBarContainer">
-                            {/* Invert the moving bar's position logic */}
-                            <div
-                              className="movingBar"
-                              style={{ 
-                                top: `${(Math.min(gapHeight, 20) / 20 * 100)}%`, // Invert movement
-                                transition: 'top 0.3s ease', // Smooth transition for the movement
-                                backgroundColor: gapHeight < 8 ? '#00FF00' :  // Green for 0-7
-                                  gapHeight < 13 ? '#FFFF00' : // Yellow for 8-12
-                                  '#FF0000' // Red for 13-20
-                              }}
-                            ></div>
-                          </div>
-                          <div className="valueIndicator">
-                            {gapHeight.toFixed(2)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
                 <div className="sensor-data-section">
                   <h4>Battery</h4>
                   <h5>Cell Voltage</h5>
@@ -653,15 +815,13 @@ useEffect(() => {
                         <th className="numeric-column">Low</th>
                         <th className="numeric-column">High</th>
                         <th className="numeric-column">Average</th>
-                        <th>Units</th>
                       </tr>
                     </thead>
                     <tbody>
                           <tr>
-                            <td className="numeric-column">{lowestVoltage}</td>
-                            <td className="numeric-column">{highestVoltage}</td>
+                            <td className="numeric-column" style={{color: parseFloat(lowestVoltage) < 3.0 ? '#f87171' : '#4ade80'}}>{lowestVoltage}</td>
+                            <td className="numeric-column" style={{color: parseFloat(highestVoltage) > 4.2 ? '#f87171' : '#4ade80'}}>{highestVoltage}</td>
                             <td className="numeric-column">{averageVoltage}</td>
-                            <td>V</td>
                           </tr>
                     </tbody>
                   </table>
@@ -672,7 +832,6 @@ useEffect(() => {
                         <th className="numeric-column">Low</th>
                         <th className="numeric-column">High</th>
                         <th className="numeric-column">Average</th>
-                        <th>Units</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -680,7 +839,6 @@ useEffect(() => {
                             <td className="numeric-column">FILLER</td>
                             <td className="numeric-column">FILLER</td>
                             <td className="numeric-column">FILLER</td>
-                            <td>Ω</td>
                           </tr>
                     </tbody>
                 </table>
@@ -691,7 +849,6 @@ useEffect(() => {
                         <th className="numeric-column">Low</th>
                         <th className="numeric-column">High</th>
                         <th className="numeric-column">Average</th>
-                        <th>Units</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -699,7 +856,6 @@ useEffect(() => {
                             <td className="numeric-column">FILLER</td>
                             <td className="numeric-column">FILLER</td>
                             <td className="numeric-column">FILLER</td>
-                            <td>?</td>
                           </tr>
                     </tbody>
                 </table>
@@ -712,15 +868,13 @@ useEffect(() => {
                         <th className="numeric-column">Low</th>
                         <th className="numeric-column">High</th>
                         <th className="numeric-column">Average</th>
-                        <th>Units</th>
                       </tr>
                     </thead>
                     <tbody>
                           <tr>
-                            <td className="numeric-column">{lowTemp}</td>
-                            <td className="numeric-column">{highTemp}</td>
+                            <td className="numeric-column" style={{color: parseFloat(lowTemp) > 80 ? '#f87171' : '#4ade80'}}>{lowTemp}</td>
+                            <td className="numeric-column" style={{color: parseFloat(highTemp) > 80 ? '#f87171' : '#4ade80'}}>{highTemp}</td>
                             <td className="numeric-column">{avgTemp}</td>
-                            <td>°C</td>
                           </tr>
                     </tbody>
                   </table>
@@ -733,7 +887,6 @@ useEffect(() => {
                         <th className="numeric-column">Low</th>
                         <th className="numeric-column">High</th>
                         <th className="numeric-column">Average</th>
-                        <th>Units</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -741,7 +894,6 @@ useEffect(() => {
                             <td className="numeric-column">{lowTemp}</td>
                             <td className="numeric-column">{highTemp}</td>
                             <td className="numeric-column">{avgTemp}</td>
-                            <td>°C</td>
                           </tr>
                     </tbody>
                   </table>
@@ -750,7 +902,7 @@ useEffect(() => {
             </div>
           </div>
 
-          <div className="side-panel">
+          <div className={`side-panel ${!sidebarVisible ? 'hidden' : ''}`}>
             <div className="tabs">
               <button onClick={() => handleTabChange('sensors')}>Sensors</button>
               <button onClick={() => handleTabChange('battery')}>Battery Data</button>
@@ -767,26 +919,25 @@ useEffect(() => {
                       <th className="numeric-column">X</th>
                       <th className="numeric-column">Y</th>
                       <th className="numeric-column">Z</th>
-                      <th>Units</th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(displayedData.imuData).map(([position, sensors]) => (
                       <React.Fragment key={position}>
                         <tr>
-                          <td rowSpan="2">{position}</td>
+                          <td rowSpan="2" style={{textTransform: 'capitalize', fontWeight: 500}}>{position}</td>
                           <td>Accelerometer</td>
-                          <td className="numeric-column">{sensors.accelerometer.x.toFixed(2)}</td>
-                          <td className="numeric-column">{sensors.accelerometer.y.toFixed(2)}</td>
-                          <td className="numeric-column">{sensors.accelerometer.z.toFixed(2)}</td>
-                          <td>m/s²</td>
+                          <td className="numeric-column" style={{color: Math.abs(sensors.accelerometer.x) > 10 ? '#f87171' : '#d1d5db'}}>{sensors.accelerometer.x.toFixed(2)}</td>
+                          <td className="numeric-column" style={{color: Math.abs(sensors.accelerometer.y) > 10 ? '#f87171' : '#d1d5db'}}>{sensors.accelerometer.y.toFixed(2)}</td>
+                          <td className="numeric-column" style={{color: Math.abs(sensors.accelerometer.z) > 10 ? '#f87171' : '#d1d5db'}}>{sensors.accelerometer.z.toFixed(2)}</td>
+                          <td style={{color: '#9ca3af', fontSize: '0.75rem'}}>m/s²</td>
                         </tr>
                         <tr>
                           <td>Gyroscope</td>
                           <td className="numeric-column">{sensors.gyroscope.x.toFixed(2)}</td>
                           <td className="numeric-column">{sensors.gyroscope.y.toFixed(2)}</td>
                           <td className="numeric-column">{sensors.gyroscope.z.toFixed(2)}</td>
-                          <td>rad/s</td>
+                          <td style={{color: '#9ca3af', fontSize: '0.75rem'}}>rad/s</td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -827,81 +978,96 @@ useEffect(() => {
               </div>
 
               <div className="sensor-data-section">
-                <h4>Yoke Temperatures (°C)</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>Front Right</th>
-                      <th>Front Left</th>
-                      <th>Back Right</th>
-                      <th>Back Left</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Vertical</td>
-                      <td>{displayedData.yokeTemps.verticalFrontRight.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.verticalFrontLeft.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.verticalBackRight.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.verticalBackLeft.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td>Lateral</td>
-                      <td>{displayedData.yokeTemps.lateralFrontRight.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.lateralFrontLeft.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.lateralBackRight.toFixed(2)}</td>
-                      <td>{displayedData.yokeTemps.lateralBackLeft.toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="sensor-data-section">
-                <h4>Lim Temperatures (°C)</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>Front Right</th>
-                      <th>Front Left</th>
-                      <th>Back Right</th>
-                      <th>Back Left</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Temperature</td>
-                      <td>{displayedData.limTemps.frontRight.toFixed(2)}</td>
-                      <td>{displayedData.limTemps.frontLeft.toFixed(2)}</td>
-                      <td>{displayedData.limTemps.backRight.toFixed(2)}</td>
-                      <td>{displayedData.limTemps.backLeft.toFixed(2)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="sensor-data-section">
-                <h4>Hall Effect (Oersted)</h4>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Sensor 1</th>
-                      <th>Sensor 2</th>
-                      <th>Sensor 3</th>
-                      <th>Sensor 4</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...Array(Math.ceil(displayedData.hallEffectSensors.length / 4))].map((_, rowIndex) => (
-                      <tr key={`hallEffect-row-${rowIndex}`}>
-                        {displayedData.hallEffectSensors.slice(rowIndex * 4, (rowIndex + 1) * 4).map((hallEffect, index) => (
-                          <td key={`hallEffect-${rowIndex}-${index}`}>{hallEffect}</td>
-                        ))}
+                <h4>Hall Effect Sensors (Oersted)</h4>
+                
+                {/* Front Hub */}
+                <div className="hall-hub-section">
+                  <h5>Front Hub</h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>L Yoke F</th>
+                        <th>L Yoke B</th>
+                        <th>R Yoke F</th>
+                        <th>R Yoke B</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{displayedData.hallEffectSensors.frontHub.leftYokeFront.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.frontHub.leftYokeBack.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.frontHub.rightYokeFront.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.frontHub.rightYokeBack.toFixed(1)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>LIM Center</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{displayedData.hallEffectSensors.frontHub.limCenter.toFixed(1)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Center Hub */}
+                <div className="hall-hub-section">
+                  <h5>Center Hub</h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>LIM Left</th>
+                        <th>LIM Right</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{displayedData.hallEffectSensors.centerHub.limLeft.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.centerHub.limRight.toFixed(1)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Rear Hub */}
+                <div className="hall-hub-section">
+                  <h5>Rear Hub</h5>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>L Yoke F</th>
+                        <th>L Yoke B</th>
+                        <th>R Yoke F</th>
+                        <th>R Yoke B</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{displayedData.hallEffectSensors.rearHub.leftYokeFront.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.rearHub.leftYokeBack.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.rearHub.rightYokeFront.toFixed(1)}</td>
+                        <td>{displayedData.hallEffectSensors.rearHub.rightYokeBack.toFixed(1)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>LIM Center</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{displayedData.hallEffectSensors.rearHub.limCenter.toFixed(1)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
