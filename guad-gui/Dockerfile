@@ -13,8 +13,9 @@ RUN npm ci --legacy-peer-deps
 COPY . .
 
 # Build the React app for production
-ENV NODE_OPTIONS=--openssl-legacy-provider
-RUN npm run build
+# CI=false prevents treating warnings as errors
+# NODE_OPTIONS needed for OpenSSL compatibility with Webpack
+RUN CI=false NODE_OPTIONS=--openssl-legacy-provider npm run build
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
