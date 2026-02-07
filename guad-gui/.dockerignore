@@ -10,4 +10,3 @@ server/
 .DS_Store
 src/setupTests.js
 src/App.test.js
-src/reportWebVitals.js
